@@ -1,12 +1,12 @@
 /**
  * app.js — interfaz de usuario: navegación, formularios y el indicador de sincronización.
- * Toda la lógica de negocio vive en logic.js (datos locales) y drive-sync.js (Google Drive).
+ * Toda la lógica de negocio vive en logic.js (datos locales) y firebase-sync.js (Firebase).
  *
  * La app SÍ exige iniciar sesión con Google para usarse (ver CONTROL DE ACCESO más abajo):
  * solo entran las cuentas que el dueño autorizó en la lista blanca (Configuración → Acceso
  * a la app), más una cuenta de respaldo fija para que el dueño nunca quede fuera de su
- * propia app. Este inicio de sesión es solo de identidad (quién eres); es independiente
- * de la sincronización con Google Drive, que sigue siendo un paso aparte y opcional.
+ * propia app. Esa misma sesión sirve también para sincronizar contra Firestore — no hace
+ * falta un segundo permiso aparte, como pasaba antes con Google Drive.
  *
  * Navegación de "Clientes" (drill-down): lista → detalle de cliente → nuevo/detalle de préstamo.
  * Cada paso queda registrado en las variables de estado de abajo (clienteActualId, prestamoActualId, etc.)
@@ -824,6 +824,28 @@ function onMontoAdicionalInput() {
 function onMontoAPagarRetanqueoInput() {
   formatearInputMoneda(document.getElementById('rq_montoAPagar'));
   recalcularRetanqueo('montoAPagar');
+}
+
+// El usuario también puede editar directamente el valor del seguro o del interés
+// adicional (no solo el porcentaje); cada uno recalcula hacia atrás su porcentaje —
+// igual que en el formulario de "Nuevo préstamo".
+function onRqValorSeguroInput() {
+  if (!prestamoActual) return;
+  formatearInputMoneda(document.getElementById('rq_valorSeguro'));
+  const montoAdicional = limpiarNumero(document.getElementById('rq_montoAdicional').value);
+  const valorSeguro = limpiarNumero(document.getElementById('rq_valorSeguro').value);
+  document.getElementById('rq_pSeguro').value = montoAdicional > 0 ? round1((valorSeguro / montoAdicional) * 100) : 0;
+}
+
+function onRqValorInteresInput() {
+  if (!prestamoActual) return;
+  formatearInputMoneda(document.getElementById('rq_valorInteres'));
+  const montoAdicional = limpiarNumero(document.getElementById('rq_montoAdicional').value);
+  const valorInteres = limpiarNumero(document.getElementById('rq_valorInteres').value);
+  document.getElementById('rq_pInteres').value = montoAdicional > 0 ? round1((valorInteres / montoAdicional) * 100) : 0;
+  const valorAbono = limpiarNumero(document.getElementById('rq_valorAbono').value);
+  const saldoAntes = Math.max(0, round2(prestamoActual.Saldo_Pendiente - valorAbono));
+  document.getElementById('rq_montoAPagar').value = money(saldoAntes + montoAdicional + valorInteres);
 }
 
 function recalcularRetanqueo(origen) {
