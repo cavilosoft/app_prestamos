@@ -91,8 +91,8 @@ autorizados y su propia dirección web.
    > *siempre* pueden entrar y sincronizar, sin importar la lista blanca. Para esta
    > instalación nueva, **reemplaza esos dos correos por el/los tuyos** antes de
    > pegarlas (ver Paso 6 — deben coincidir exactamente con los que pongas en
-   > `logic.js`). Si dejas los correos de Carlos ahí, su cuenta también podría entrar
-   > a esta copia nueva de la app.
+   > `config-local.js`). Si dejas los correos de Carlos ahí, su cuenta también podría
+   > entrar a esta copia nueva de la app.
 
 ---
 
@@ -109,14 +109,21 @@ autorizados y su propia dirección web.
 
 ---
 
-## Paso 6 — Poner tus propias cuentas de respaldo
+## Paso 6 — Configurar `config-local.js` (cuentas de respaldo + configuración de Firebase)
 
-Estas son las cuentas que **siempre** pueden entrar a la app y sincronizar, aunque se
-borren por error de la lista blanca de Configuración — pensadas para que el dueño de
-*esta* instalación nunca quede bloqueado de su propia app. Hay que definirlas en dos
-archivos, y **deben coincidir exactamente** entre ellos:
+Este archivo reúne todo lo específico de tu instalación en un solo lugar — separado a
+propósito del resto del código — para que cuando más adelante te entregue una
+actualización de la app **no tengas que volver a tocar esto**: solo reemplazas los demás
+archivos y conservas este tal como lo dejaste.
 
-1. Abre `public/js/logic.js`, busca esta línea (cerca de la línea 113):
+### 6.1 — Cuentas de respaldo
+
+Son las cuentas que **siempre** pueden entrar a la app y sincronizar, aunque se borren
+por error de la lista blanca de Configuración — pensadas para que el dueño de *esta*
+instalación nunca quede bloqueado de su propia app. Hay que definirlas en dos archivos,
+y **deben coincidir exactamente** entre ellos:
+
+1. Abre `public/js/config-local.js`, busca esta línea:
    ```js
    const CORREOS_RESPALDO = ['csilva0725@gmail.com', 'sergiosamir330@gmail.com'];
    ```
@@ -141,9 +148,7 @@ pero Firestore rechace la sincronización (o al revés) — revisa que el correo
 escrito igual en ambos lados (mismas mayúsculas/minúsculas no importa, la app y las
 reglas lo comparan en minúsculas, pero sí debe ser la misma dirección).
 
----
-
-## Paso 7 — Copiar la configuración del proyecto a la app
+### 6.2 — Configuración del proyecto de Firebase
 
 1. En Firebase Console, haz clic en el ícono de engranaje (⚙️) junto a "Project
    Overview" → **Configuración del proyecto**.
@@ -162,7 +167,7 @@ reglas lo comparan en minúsculas, pero sí debe ser la misma dirección).
      appId: "..."
    };
    ```
-4. Abre `public/js/firebase-sync.js`, busca cerca del inicio:
+4. En el mismo `public/js/config-local.js`, busca cerca del inicio:
    ```js
    const FIREBASE_CONFIG = {
      apiKey: 'TU_API_KEY_AQUI',
@@ -181,7 +186,7 @@ reglas lo comparan en minúsculas, pero sí debe ser la misma dirección).
 
 ---
 
-## Paso 8 — Primer ingreso
+## Paso 7 — Primer ingreso
 
 1. Abre la URL de tu app (`https://TU-PROYECTO.web.app`) e inicia sesión con la cuenta
    de respaldo que pusiste en el Paso 6.
@@ -204,8 +209,8 @@ reglas lo comparan en minúsculas, pero sí debe ser la misma dirección).
 firebase login
 firebase use --add                      # elige el proyecto nuevo, alias "default"
 # Firebase Console: activar Google en Authentication, crear Firestore (default, modo producción)
-# Editar CORREOS_RESPALDO en public/js/logic.js y esRespaldo() en firestore.rules (mismos correos)
+# Editar CORREOS_RESPALDO en public/js/config-local.js y esRespaldo() en firestore.rules (mismos correos)
 firebase deploy --only firestore:rules
-# Editar FIREBASE_CONFIG en public/js/firebase-sync.js con los datos del proyecto nuevo
+# Editar FIREBASE_CONFIG en public/js/config-local.js con los datos del proyecto nuevo
 firebase deploy
 ```

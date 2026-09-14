@@ -9,19 +9,9 @@
  * la app sirve también para sincronizar, y quién puede leer/escribir los datos se controla
  * con las Reglas de seguridad de Firestore (ver INSTRUCCIONES.md, "Reglas de Firestore").
  *
- * IMPORTANTE: reemplaza FIREBASE_CONFIG por la configuración de TU proyecto de Firebase —
- * el mismo que ya usas para el Hosting (Firebase Console → ⚙️ Configuración del proyecto →
- * "Tus apps" → selecciona (o crea) una app web → "Configuración del SDK").
+ * FIREBASE_CONFIG vive en js/config-local.js (se carga antes que este archivo) — así no
+ * hay que volver a pegarla cada vez que este archivo se actualiza.
  */
-
-const FIREBASE_CONFIG = {
-  apiKey: 'TU_API_KEY_AQUI',
-  authDomain: 'TU_PROYECTO.firebaseapp.com',
-  projectId: 'TU_PROYECTO',
-  storageBucket: 'TU_PROYECTO.appspot.com',
-  messagingSenderId: 'TU_SENDER_ID',
-  appId: 'TU_APP_ID'
-};
 
 // Todos los datos viven en un único documento: colección "sync", documento "maestro".
 // A la escala de un negocio pequeño esto es simple y suficiente; si algún día crecieras

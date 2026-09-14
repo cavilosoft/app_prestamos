@@ -4,7 +4,7 @@ service cloud.firestore {
 
     // Cuentas de respaldo: siempre tienen acceso, aunque no estén en la lista de
     // Configuración → 🔒 Acceso a la app, para que nunca quedes bloqueado por accidente.
-    // Debe coincidir con CORREOS_RESPALDO en public/js/logic.js.
+    // Debe coincidir con CORREOS_RESPALDO en public/js/config-local.js.
     function esRespaldo() {
       return ['csilva0725@gmail.com', 'sergiosamir330@gmail.com']
         .hasAny([request.auth.token.email.lower()]);

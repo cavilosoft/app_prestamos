@@ -126,10 +126,15 @@ actualizar el documento de datos; nadie puede borrarlo desde fuera de la app.
 > si prefieres pegarlo con la terminal en vez de la consola web:
 > `firebase deploy --only firestore:rules`.
 >
-> Si en algún momento cambias las cuentas de respaldo en `public/js/logic.js`
+> Si en algún momento cambias las cuentas de respaldo en `public/js/config-local.js`
 > (`CORREOS_RESPALDO`), actualiza también esta misma lista aquí para que coincidan.
 
 ### 2.4 — Copiar la configuración del proyecto a la app
+
+Tanto la configuración de Firebase como las cuentas de respaldo viven en un único
+archivo, `public/js/config-local.js` — separado a propósito del resto del código, para
+que cuando te entregue una actualización de la app **no tengas que volver a pegar nada
+aquí**: solo reemplazas los demás archivos y conservas este tal como lo dejaste.
 
 1. En Firebase Console, haz clic en el ícono de engranaje (⚙️) junto a "Project Overview"
    → **Configuración del proyecto**.
@@ -147,7 +152,7 @@ actualizar el documento de datos; nadie puede borrarlo desde fuera de la app.
      appId: "..."
    };
    ```
-4. Abre el archivo `public/js/firebase-sync.js` de esta entrega y busca, cerca del
+4. Abre el archivo `public/js/config-local.js` de esta entrega y busca, cerca del
    inicio:
    ```js
    const FIREBASE_CONFIG = {
@@ -162,11 +167,14 @@ actualizar el documento de datos; nadie puede borrarlo desde fuera de la app.
 5. Reemplaza esos seis valores por los que copiaste (mantén las comillas).
 6. Publica de nuevo (`firebase deploy`).
 
-> **Nota:** cada vez que te entregue una actualización de la app, el archivo
-> `js/firebase-sync.js` que recibas traerá de nuevo los valores de ejemplo en lugar de tu
-> configuración real (no la guardo entre entregas) — así que si reemplazas *todos* los
-> archivos, no olvides repetir este paso o la app se quedará mostrando "Falta configurar
-> FIREBASE_CONFIG..." en la pantalla de acceso.
+> **Nota:** de ahora en adelante te entregaré solo los archivos que realmente cambien en
+> cada actualización — como `config-local.js` casi nunca va a estar entre ellos (a menos
+> que cambie algo de tu configuración de Firebase o tus cuentas de respaldo), tu
+> configuración real queda a salvo sin que tengas que repetir este paso cada vez. Si
+> alguna vez recibes el paquete completo del proyecto (por ejemplo, para una instalación
+> nueva), ahí sí trae los valores de ejemplo — solo en ese caso hay que repetir este paso,
+> o la app se quedará mostrando "Falta configurar FIREBASE_CONFIG..." en la pantalla de
+> acceso.
 
 Con esto, ya no hace falta nada de lo que antes se hacía en Google Cloud Console
 (pantalla de consentimiento de OAuth, "Usuarios de prueba", ni compartir carpetas de
@@ -318,8 +326,10 @@ Desde ese momento, la barra superior de la app muestra el estado: "Sincronizando
 Como son archivos estáticos, cualquier cambio que te ayude a hacer requiere volver a
 correr `firebase deploy` dentro de la carpeta con los archivos actualizados. El Service
 Worker (`sw.js`) se encarga de que la próxima vez que abras la app, tome la versión
-nueva automáticamente. Si un cambio toca `public/js/firebase-sync.js`, recuerda repetir
-el paso 2.4 (pegar tu configuración real) antes de publicar.
+nueva automáticamente. Cada actualización solo trae los archivos que realmente cambiaron
+— `public/js/config-local.js` (tu configuración de Firebase y tus cuentas de respaldo)
+no se toca a menos que ese cambio sea justamente sobre eso, así que normalmente no hace
+falta repetir el paso 2.4.
 
 ## Siguientes pasos opcionales
 

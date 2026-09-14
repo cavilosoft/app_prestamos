@@ -109,8 +109,8 @@ async function guardarConfig(interes, seguro, moneda, capitalInicial) {
 // pueden entrar sin importar la lista, para que estas cuentas nunca queden bloqueadas de
 // la app (por ejemplo si alguna se borra por error de la lista). A diferencia de los
 // correos que se agregan desde Configuración, estas quedan fijas en el código: no se
-// pueden quitar desde la app.
-const CORREOS_RESPALDO = ['csilva0725@gmail.com', 'sergiosamir330@gmail.com'];
+// pueden quitar desde la app. CORREOS_RESPALDO vive en js/config-local.js (se carga antes
+// que este archivo) — así no hay que volver a definirla cada vez que logic.js se actualiza.
 
 function _normalizarCorreo(correo) {
   return String(correo || '').trim().toLowerCase();
