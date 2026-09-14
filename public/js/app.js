@@ -1624,7 +1624,7 @@ function iniciarControlDeAcceso() {
     });
   } catch (e) {
     // Si Firebase no cargó (sin internet, bloqueado, o falta configurar FIREBASE_CONFIG en
-    // js/firebase-sync.js) no hay que dejar la pantalla de bloqueo esperando para siempre:
+    // js/config-local.js) no hay que dejar la pantalla de bloqueo esperando para siempre:
     // se avisa y se oculta el botón (no serviría de nada mostrarlo si Firebase no cargó).
     mostrarLockScreen(e.message || 'No se pudo conectar con Firebase. Revisa tu conexión a internet.');
     document.getElementById('btnIniciarSesionGoogle').style.display = 'none';

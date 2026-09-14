@@ -28,7 +28,7 @@ function _inicializar() {
   if (_app) return;
   if (!window.firebase) throw new Error('No cargó la librería de Firebase (revisa tu conexión a internet).');
   if (!FIREBASE_CONFIG.apiKey || FIREBASE_CONFIG.apiKey.indexOf('TU_API_KEY_AQUI') !== -1) {
-    throw new Error('Falta configurar FIREBASE_CONFIG en js/firebase-sync.js con los datos de tu proyecto de Firebase.');
+    throw new Error('Falta configurar FIREBASE_CONFIG en js/config-local.js con los datos de tu proyecto de Firebase.');
   }
   _app = firebase.initializeApp(FIREBASE_CONFIG);
   _auth = firebase.auth();
