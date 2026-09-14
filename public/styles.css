@@ -144,7 +144,7 @@ textarea { resize: vertical; min-height: 50px; }
 .msg.error { background: var(--rojo-claro); color: var(--rojo); }
 .msg.ok { background: var(--verde-claro); color: var(--verde); }
 .msg.info { background: var(--azul-claro); color: var(--azul); }
-.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px,1fr)); gap: 10px; }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px,1fr)); gap: 10px; margin-bottom: 14px; }
 .kpi { background: #fff; border: 1px solid var(--borde); border-radius: 10px; padding: 14px; }
 .kpi .valor { font-size: 20px; font-weight: 700; margin-top: 4px; }
 .kpi .etq { font-size: 12px; color: var(--gris); }

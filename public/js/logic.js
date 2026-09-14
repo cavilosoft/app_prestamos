@@ -1,7 +1,7 @@
 /**
  * logic.js — reglas de negocio y acceso a datos (equivalente al antiguo Code.gs, pero
  * leyendo/escribiendo en IndexedDB local en vez de Google Sheets). No sabe nada de UI
- * ni de Google Drive: sync.js se encarga de sincronizar lo que aquí se guarda.
+ * ni de Firebase: firebase-sync.js se encarga de sincronizar lo que aquí se guarda.
  */
 
 const ESTADOS = { ACTIVO: 'Activo', PAGADO: 'Pagado', MORA: 'Mora', CANCELADO: 'Cancelado' };
@@ -243,6 +243,14 @@ async function crearCliente(datos) {
 async function actualizarCliente(id, datos) {
   const actual = await obtenerCliente(id);
   if (!actual) throw new Error('Cliente no encontrado.');
+
+  if (datos.Cedula !== undefined && String(datos.Cedula) !== String(actual.Cedula)) {
+    const existentes = await listarClientes();
+    if (existentes.some((c) => c.id !== id && String(c.Cedula) === String(datos.Cedula))) {
+      throw new Error('Ya existe otro cliente registrado con la cédula ' + datos.Cedula + '.');
+    }
+  }
+
   const campos = ['Cedula', 'Nombres', 'Apellidos', 'Celular', 'Direccion', 'Ciudad', 'Geolocalizacion', 'Ocupacion', 'Punto_Referencia', 'Nota', 'ID_Ruta'];
   campos.forEach((c) => { if (datos[c] !== undefined) actual[c] = datos[c]; });
   actual.updatedAt = nowISO();
@@ -345,8 +353,19 @@ async function crearCobrador(datos) {
 async function actualizarCobrador(id, datos) {
   const actual = await obtenerCobrador(id);
   if (!actual) throw new Error('Cobrador no encontrado.');
+
+  if (datos.Email !== undefined) {
+    const email = String(datos.Email).toLowerCase().trim();
+    if (!email) throw new Error('El correo de Google del cobrador es obligatorio.');
+    if (email !== actual.Email) {
+      const existentes = await listarCobradores();
+      if (existentes.some((c) => c.id !== id && String(c.Email || '').toLowerCase().trim() === email)) {
+        throw new Error('Ya existe otro cobrador con ese correo.');
+      }
+    }
+    actual.Email = email;
+  }
   if (datos.Nombre !== undefined) actual.Nombre = datos.Nombre;
-  if (datos.Email !== undefined) actual.Email = String(datos.Email).toLowerCase().trim();
   if (datos.Telefono !== undefined) actual.Telefono = datos.Telefono;
   if (datos.Activo !== undefined) actual.Activo = !!datos.Activo;
   actual.updatedAt = nowISO();
@@ -435,6 +454,36 @@ async function crearPrestamo(datos) {
   };
   await idb.guardar('prestamos', prestamo);
   return enriquecerPrestamo(prestamo, []);
+}
+
+/**
+ * Corrige los datos "de cabecera" de un préstamo ya creado (fecha, monto, seguro,
+ * interés, monto a pagar, fecha de pago, nota) — por ejemplo, un error de digitación.
+ * No toca el plan de cuotas, el estado manual, el historial de retanqueos ni los abonos
+ * ya registrados: el saldo pendiente se sigue calculando solo a partir de Monto_A_Pagar
+ * y los abonos reales, así que no hay nada más que arrastrar.
+ * datos: { Fecha_Prestamo, Monto_Prestado, Porcentaje_Seguro, Valor_Seguro,
+ *          Monto_Entregado, Porcentaje_Interes, Valor_Interes, Monto_A_Pagar,
+ *          Fecha_Pago, Frecuencia_Pago, Nota }
+ */
+async function actualizarPrestamo(id, datos) {
+  const actual = await idb.obtenerPorId('prestamos', id);
+  if (!actual) throw new Error('Préstamo no encontrado.');
+
+  const monto = datos.Monto_Prestado !== undefined ? Number(datos.Monto_Prestado) : actual.Monto_Prestado;
+  if (!monto || monto <= 0) throw new Error('El monto prestado debe ser mayor a cero.');
+  const fechaPago = datos.Fecha_Pago !== undefined ? datos.Fecha_Pago : actual.Fecha_Pago;
+  if (!fechaPago) throw new Error('La fecha de pago es obligatoria.');
+
+  const CAMPOS_NUMERICOS = ['Monto_Prestado', 'Porcentaje_Seguro', 'Valor_Seguro', 'Monto_Entregado', 'Porcentaje_Interes', 'Valor_Interes', 'Monto_A_Pagar'];
+  const CAMPOS_TEXTO = ['Fecha_Prestamo', 'Fecha_Pago', 'Frecuencia_Pago', 'Nota'];
+
+  CAMPOS_NUMERICOS.forEach((c) => { if (datos[c] !== undefined) actual[c] = round2(Number(datos[c]) || 0); });
+  CAMPOS_TEXTO.forEach((c) => { if (datos[c] !== undefined) actual[c] = datos[c]; });
+
+  actual.updatedAt = nowISO();
+  await idb.guardar('prestamos', actual);
+  return obtenerPrestamo(id);
 }
 
 async function actualizarEstadoManual(idPrestamo, nuevoEstado) {
@@ -753,6 +802,35 @@ async function registrarCapital(datos) {
   return capital;
 }
 
+/** datos: igual que registrarCapital, pero editando un registro existente (corrige un
+ * error de digitación, por ejemplo). */
+async function actualizarCapital(id, datos) {
+  const actual = await idb.obtenerPorId('capital', id);
+  if (!actual) throw new Error('Inyección de capital no encontrada.');
+
+  const monto = datos.Monto !== undefined ? Number(datos.Monto) : actual.Monto;
+  if (!monto || monto <= 0) throw new Error('El monto de la inyección de capital debe ser mayor a cero.');
+
+  const tipo = datos.Tipo !== undefined
+    ? (datos.Tipo === TIPOS_CAPITAL.INVERSIONISTA ? TIPOS_CAPITAL.INVERSIONISTA : TIPOS_CAPITAL.PROPIO)
+    : actual.Tipo;
+  const inversionista = tipo === TIPOS_CAPITAL.INVERSIONISTA
+    ? String((datos.Inversionista !== undefined ? datos.Inversionista : actual.Inversionista) || '').trim()
+    : '';
+  if (tipo === TIPOS_CAPITAL.INVERSIONISTA && !inversionista) {
+    throw new Error('Debes indicar el nombre del inversionista.');
+  }
+
+  if (datos.Fecha !== undefined) actual.Fecha = datos.Fecha;
+  actual.Monto = monto;
+  actual.Tipo = tipo;
+  actual.Inversionista = inversionista;
+  if (datos.Nota !== undefined) actual.Nota = datos.Nota;
+  actual.updatedAt = nowISO();
+  await idb.guardar('capital', actual);
+  return actual;
+}
+
 async function eliminarCapital(id) {
   const actual = await idb.obtenerPorId('capital', id);
   if (!actual) throw new Error('Inyección de capital no encontrada.');
@@ -881,8 +959,8 @@ window.logic = {
   obtenerCliente, crearCliente, actualizarCliente,
   listarRutas, obtenerRuta, crearRuta, actualizarRuta, contarClientesPorRuta,
   listarCobradores, obtenerCobrador, obtenerCobradorPorCorreo, crearCobrador, actualizarCobrador, listarRutasPorCobrador,
-  calcularSugerido, crearPrestamo, actualizarEstadoManual, obtenerPrestamo,
+  calcularSugerido, crearPrestamo, actualizarPrestamo, actualizarEstadoManual, obtenerPrestamo,
   obtenerPrestamosPorCliente, listarPrestamosPorClientePaginado, obtenerHistorialCliente, obtenerAbonosPorPrestamo,
   registrarAbono, marcarCuotaPagada, revertirCuotaPagada, retanquearPrestamo, obtenerDashboard,
-  listarCapital, registrarCapital, eliminarCapital, listarInversionistasUsados, obtenerResumenCapital
+  listarCapital, registrarCapital, actualizarCapital, eliminarCapital, listarInversionistasUsados, obtenerResumenCapital
 };
