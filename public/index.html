@@ -49,6 +49,9 @@
 
     <!-- ---- Vista: lista de clientes ---- -->
     <div id="vc_lista" class="vista">
+      <div style="display:flex; justify-content:flex-end; margin-bottom:10px;">
+        <button class="btn" onclick="mostrarFormNuevoCliente()">➕ Nuevo cliente</button>
+      </div>
       <div class="card">
         <h2>Clientes</h2>
         <div class="row">
@@ -65,7 +68,6 @@
             </select>
           </div>
         </div>
-        <button class="btn" onclick="mostrarFormNuevoCliente()">➕ Nuevo cliente</button>
       </div>
       <div id="cl_listaContenido"></div>
       <div id="cl_paginacion" class="paginacion"></div>

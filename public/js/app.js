@@ -25,6 +25,7 @@ const SYNC_HABILITADO = true;
 
 let rutasCache = [];
 let cobradoresCache = [];
+let capitalCache = [];
 
 // Si la cuenta que inició sesión es la del dueño (o cualquier otra sin vincular), esto
 // queda en null y ve toda la app. Si el correo coincide con el de un Cobrador registrado,
@@ -222,16 +223,25 @@ function renderPaginacion(contenedorId, info, onCambiarPagina) {
 // CLIENTES — lista paginada con filtros
 // -------------------------------------------------------------------
 
+// Reconstruye las opciones de estos selects (ciudad/ruta/cobrador cambian con los datos), pero
+// conservando el valor que el usuario ya tenía elegido — si no, cada refresco (al cambiar de
+// página, crear un cliente, etc.) los devolvía a "Todas/Todos" y el filtro se perdía solo.
 async function cargarSelectsFiltroClientes() {
   const ciudades = await logic.listarCiudadesUsadas();
   const selCiudad = document.getElementById('cl_ciudad');
+  const valorPrevioCiudad = selCiudad.value;
   selCiudad.innerHTML = '<option value="">Todas</option>' + ciudades.map((c) => '<option value="' + esc(c) + '">' + esc(c) + '</option>').join('');
+  selCiudad.value = valorPrevioCiudad;
 
   const selRuta = document.getElementById('cl_ruta');
+  const valorPrevioRuta = selRuta.value;
   selRuta.innerHTML = '<option value="">Todas</option>' + rutasCache.map((r) => '<option value="' + r.id + '">' + esc(r.Nombre) + '</option>').join('');
+  selRuta.value = valorPrevioRuta;
 
   const selCobrador = document.getElementById('cl_cobrador');
+  const valorPrevioCobrador = selCobrador.value;
   selCobrador.innerHTML = '<option value="">Todos</option>' + cobradoresCache.map((c) => '<option value="' + c.id + '">' + esc(c.Nombre) + '</option>').join('');
+  selCobrador.value = valorPrevioCobrador;
 }
 
 function onFiltroClientesChange() {
@@ -367,7 +377,10 @@ function renderInfoCliente(c) {
     rutasParaSelect.map((r) => '<option value="' + r.id + '"' + (r.id === c.ID_Ruta ? ' selected' : '') + '>' + esc(r.Nombre) + '</option>').join('');
 
   document.getElementById('dc_infoCliente').innerHTML =
-    '<h2>' + esc(c.Nombres + ' ' + (c.Apellidos || '')) + '</h2>' +
+    '<div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px;">' +
+      '<h2 style="margin:0;">' + esc(c.Nombres + ' ' + (c.Apellidos || '')) + '</h2>' +
+      '<button type="button" class="btn chico secundario" onclick="mostrarModalEditarCliente()">✏️ Editar</button>' +
+    '</div>' +
     '<div class="datos-grid">' +
       dato('Cédula', c.Cedula) + dato('Celular', c.Celular) + dato('Ciudad', c.Ciudad) +
       dato('Dirección', c.Direccion) + dato('Ocupación', c.Ocupacion) + dato('Punto de referencia', c.Punto_Referencia) +
@@ -378,6 +391,66 @@ function renderInfoCliente(c) {
       '<div class="field" style="max-width:260px;"><label>Ruta</label><select id="dc_rutaSelect">' + opcionesRuta + '</select></div>' +
       '<div class="field" style="flex:0 0 auto;"><button type="button" class="btn chico secundario" onclick="guardarRutaCliente()">Guardar ruta</button></div>' +
     '</div>';
+}
+
+function mostrarModalEditarCliente() {
+  if (!clienteActual) return;
+  const c = clienteActual;
+  const rutasParaSelect = restriccionCobrador ? rutasCache.filter((r) => rutasIdsCobradorActual.includes(r.id)) : rutasCache;
+  const opcionesRuta = (restriccionCobrador ? '' : '<option value="">Sin ruta asignada</option>') +
+    rutasParaSelect.map((r) => '<option value="' + r.id + '"' + (r.id === c.ID_Ruta ? ' selected' : '') + '>' + esc(r.Nombre) + '</option>').join('');
+
+  const cuerpo =
+    '<div class="row">' +
+      '<div class="field"><label>Cédula *</label><input type="text" id="ec_cedula" value="' + esc(c.Cedula) + '" required></div>' +
+      '<div class="field"><label>Celular</label><input type="text" id="ec_celular" value="' + esc(c.Celular) + '"></div>' +
+    '</div>' +
+    '<div class="row">' +
+      '<div class="field"><label>Nombres *</label><input type="text" id="ec_nombres" value="' + esc(c.Nombres) + '" required></div>' +
+      '<div class="field"><label>Apellidos</label><input type="text" id="ec_apellidos" value="' + esc(c.Apellidos) + '"></div>' +
+    '</div>' +
+    '<div class="row">' +
+      '<div class="field"><label>Dirección</label><input type="text" id="ec_direccion" value="' + esc(c.Direccion) + '"></div>' +
+      '<div class="field"><label>Ciudad</label><input type="text" id="ec_ciudad" value="' + esc(c.Ciudad) + '"></div>' +
+    '</div>' +
+    '<div class="row">' +
+      '<div class="field"><label>Ruta</label><select id="ec_ruta">' + opcionesRuta + '</select></div>' +
+      '<div class="field"><label>Geolocalización (lat, lng)</label><input type="text" id="ec_geo" value="' + esc(c.Geolocalizacion) + '"></div>' +
+    '</div>' +
+    '<div class="row">' +
+      '<div class="field"><label>Ocupación</label><input type="text" id="ec_ocupacion" value="' + esc(c.Ocupacion) + '"></div>' +
+      '<div class="field"><label>Punto de referencia</label><input type="text" id="ec_referencia" value="' + esc(c.Punto_Referencia) + '"></div>' +
+    '</div>' +
+    '<div class="field"><label>Nota</label><textarea id="ec_nota">' + esc(c.Nota) + '</textarea></div>';
+
+  abrirModal('Editar cliente', cuerpo, guardarEdicionCliente, 'Guardar cambios');
+}
+
+async function guardarEdicionCliente() {
+  const cedula = document.getElementById('ec_cedula').value.trim();
+  const nombres = document.getElementById('ec_nombres').value.trim();
+  if (!cedula || !nombres) { mostrarMsg('modalMsg', '⚠️ La cédula y el nombre son obligatorios.', 'error'); return; }
+
+  const datos = {
+    Cedula: cedula,
+    Celular: document.getElementById('ec_celular').value.trim(),
+    Nombres: nombres,
+    Apellidos: document.getElementById('ec_apellidos').value.trim(),
+    Direccion: document.getElementById('ec_direccion').value.trim(),
+    Ciudad: document.getElementById('ec_ciudad').value.trim(),
+    ID_Ruta: document.getElementById('ec_ruta').value || null,
+    Geolocalizacion: document.getElementById('ec_geo').value.trim(),
+    Ocupacion: document.getElementById('ec_ocupacion').value.trim(),
+    Punto_Referencia: document.getElementById('ec_referencia').value.trim(),
+    Nota: document.getElementById('ec_nota').value.trim()
+  };
+  try {
+    clienteActual = await logic.actualizarCliente(clienteActualId, datos);
+    cerrarModal();
+    renderInfoCliente(clienteActual);
+    await refrescarListaClientes();
+    intentarSincronizar();
+  } catch (e) { manejarError(e, 'modalMsg'); }
 }
 
 async function guardarRutaCliente() {
@@ -708,7 +781,10 @@ function renderResumenPrestamo(p) {
 
   document.getElementById('dp_resumen').innerHTML =
     '<div class="prestamo-head"><strong>' + p.id + ' · ' + p.Fecha_Prestamo + '</strong>' +
-    '<span class="badge ' + p.Estado + '">' + p.Estado + '</span></div>' +
+    '<span style="display:flex; align-items:center; gap:8px;">' +
+      '<span class="badge ' + p.Estado + '">' + p.Estado + '</span>' +
+      '<button type="button" class="btn chico secundario" onclick="mostrarModalEditarPrestamo()">✏️ Editar</button>' +
+    '</span></div>' +
     '<div class="datos-grid">' +
       dato('Monto prestado', money(p.Monto_Prestado)) +
       dato('Seguro (' + round1(p.Porcentaje_Seguro) + '%)', money(p.Valor_Seguro)) +
@@ -741,6 +817,119 @@ function renderHistorialPrestamo(p) {
     ).join('') + '</div>';
   }
   document.getElementById('dp_historial').innerHTML = html;
+}
+
+// -------------------------------------------------------------------
+// EDITAR PRÉSTAMO (corrige datos de cabecera; no toca abonos ni plan de cuotas)
+// -------------------------------------------------------------------
+
+function mostrarModalEditarPrestamo() {
+  if (!prestamoActual) return;
+  const p = prestamoActual;
+  const cuerpo =
+    '<div class="row">' +
+      '<div class="field"><label>Fecha del préstamo</label><input type="date" id="ep_fecha" value="' + esc(p.Fecha_Prestamo) + '"></div>' +
+      '<div class="field"><label>Monto prestado *</label><input type="text" inputmode="numeric" id="ep_monto" value="' + money(p.Monto_Prestado) + '" required oninput="onEpMontoInput()"></div>' +
+    '</div>' +
+    '<div class="row">' +
+      '<div class="field"><label>% Seguro</label><input type="number" step="0.01" id="ep_pSeguro" value="' + round1(p.Porcentaje_Seguro) + '" oninput="recalcularEditarPrestamo(\'seguro\')"></div>' +
+      '<div class="field"><label>Valor del seguro</label><input type="text" inputmode="numeric" id="ep_valorSeguro" value="' + money(p.Valor_Seguro) + '" oninput="onEpValorSeguroInput()"></div>' +
+    '</div>' +
+    '<div class="row">' +
+      '<div class="field"><label>% Interés</label><input type="number" step="0.01" id="ep_pInteres" value="' + round1(p.Porcentaje_Interes) + '" oninput="recalcularEditarPrestamo(\'interes\')"></div>' +
+      '<div class="field"><label>Valor del interés</label><input type="text" inputmode="numeric" id="ep_valorInteres" value="' + money(p.Valor_Interes) + '" oninput="onEpValorInteresInput()"></div>' +
+    '</div>' +
+    '<div class="row">' +
+      '<div class="field"><label>Monto a pagar</label><input type="text" inputmode="numeric" id="ep_montoAPagar" value="' + money(p.Monto_A_Pagar) + '" oninput="onEpMontoAPagarInput()"></div>' +
+      '<div class="field"><label>Fecha de pago *</label><input type="date" id="ep_fechaPago" value="' + esc(p.Fecha_Pago) + '" required></div>' +
+    '</div>' +
+    '<div class="field"><label>Nota</label><textarea id="ep_nota">' + esc(p.Nota) + '</textarea></div>' +
+    '<p class="muted" style="margin-top:8px;">Esto corrige los datos del préstamo (por ejemplo, un error de digitación); no cambia los abonos ya registrados ni el plan de cuotas.</p>';
+
+  abrirModal('Editar préstamo', cuerpo, guardarEdicionPrestamo, 'Guardar cambios');
+}
+
+function onEpMontoInput() {
+  formatearInputMoneda(document.getElementById('ep_monto'));
+  recalcularEditarPrestamo('monto');
+}
+
+function onEpMontoAPagarInput() {
+  formatearInputMoneda(document.getElementById('ep_montoAPagar'));
+  recalcularEditarPrestamo('montoAPagar');
+}
+
+function onEpValorSeguroInput() {
+  formatearInputMoneda(document.getElementById('ep_valorSeguro'));
+  const monto = limpiarNumero(document.getElementById('ep_monto').value);
+  const valorSeguro = limpiarNumero(document.getElementById('ep_valorSeguro').value);
+  document.getElementById('ep_pSeguro').value = monto > 0 ? round1((valorSeguro / monto) * 100) : 0;
+}
+
+function onEpValorInteresInput() {
+  formatearInputMoneda(document.getElementById('ep_valorInteres'));
+  const monto = limpiarNumero(document.getElementById('ep_monto').value);
+  const valorInteres = limpiarNumero(document.getElementById('ep_valorInteres').value);
+  document.getElementById('ep_pInteres').value = monto > 0 ? round1((valorInteres / monto) * 100) : 0;
+  document.getElementById('ep_montoAPagar').value = money(monto + valorInteres);
+}
+
+function recalcularEditarPrestamo(origen) {
+  const monto = limpiarNumero(document.getElementById('ep_monto').value);
+  const pSeguro = Number(document.getElementById('ep_pSeguro').value) || 0;
+  const pInteres = Number(document.getElementById('ep_pInteres').value) || 0;
+
+  if (origen === 'montoAPagar') {
+    const montoAPagarManual = limpiarNumero(document.getElementById('ep_montoAPagar').value);
+    const valorInteres = montoAPagarManual - monto;
+    const pInteresCalc = monto > 0 ? (valorInteres / monto) * 100 : 0;
+    document.getElementById('ep_pInteres').value = round1(pInteresCalc);
+    document.getElementById('ep_valorInteres').value = money(valorInteres);
+    const valorSeguro = monto * (pSeguro / 100);
+    document.getElementById('ep_valorSeguro').value = money(valorSeguro);
+    return;
+  }
+
+  if (!monto) {
+    document.getElementById('ep_valorSeguro').value = '';
+    document.getElementById('ep_valorInteres').value = '';
+    document.getElementById('ep_montoAPagar').value = '';
+    return;
+  }
+
+  const valorSeguro2 = monto * (pSeguro / 100);
+  const valorInteres2 = monto * (pInteres / 100);
+  document.getElementById('ep_valorSeguro').value = money(valorSeguro2);
+  document.getElementById('ep_valorInteres').value = money(valorInteres2);
+  document.getElementById('ep_montoAPagar').value = money(monto + valorInteres2);
+}
+
+async function guardarEdicionPrestamo() {
+  const monto = limpiarNumero(document.getElementById('ep_monto').value);
+  const fechaPago = document.getElementById('ep_fechaPago').value;
+  if (!monto || monto <= 0) { mostrarMsg('modalMsg', '⚠️ El monto prestado debe ser mayor a cero.', 'error'); return; }
+  if (!fechaPago) { mostrarMsg('modalMsg', '⚠️ La fecha de pago es obligatoria.', 'error'); return; }
+
+  const valorSeguro = limpiarNumero(document.getElementById('ep_valorSeguro').value);
+  const datos = {
+    Fecha_Prestamo: document.getElementById('ep_fecha').value,
+    Monto_Prestado: monto,
+    Porcentaje_Seguro: Number(document.getElementById('ep_pSeguro').value) || 0,
+    Valor_Seguro: valorSeguro,
+    Monto_Entregado: monto - valorSeguro,
+    Porcentaje_Interes: Number(document.getElementById('ep_pInteres').value) || 0,
+    Valor_Interes: limpiarNumero(document.getElementById('ep_valorInteres').value),
+    Monto_A_Pagar: limpiarNumero(document.getElementById('ep_montoAPagar').value),
+    Fecha_Pago: fechaPago,
+    Nota: document.getElementById('ep_nota').value.trim()
+  };
+  try {
+    prestamoActual = await logic.actualizarPrestamo(prestamoActualId, datos);
+    cerrarModal();
+    await refrescarDetallePrestamo();
+    await refrescarListaPrestamosCliente();
+    intentarSincronizar();
+  } catch (e) { manejarError(e, 'modalMsg'); }
 }
 
 async function submitAbono(ev) {
@@ -944,6 +1133,7 @@ async function refrescarRutas() {
         '<div class="ri-acciones">' +
           '<select id="rt_cobradorEdit_' + r.id + '">' + opciones + '</select>' +
           '<button type="button" class="btn chico secundario" onclick="guardarCobradorDeRuta(\'' + r.id + '\')">Guardar</button>' +
+          '<button type="button" class="btn chico secundario" onclick="mostrarModalEditarRuta(\'' + r.id + '\')">✏️ Editar</button>' +
         '</div>' +
       '</div></div>';
   }).join('');
@@ -956,6 +1146,26 @@ async function guardarCobradorDeRuta(idRuta) {
     intentarSincronizar();
     await refrescarRutas();
   } catch (e) { manejarError(e, 'rutaMsg'); }
+}
+
+function mostrarModalEditarRuta(idRuta) {
+  const r = rutasCache.find((x) => x.id === idRuta);
+  if (!r) return;
+  const cuerpo =
+    '<div class="field"><label>Nombre de la ruta *</label><input type="text" id="er_nombre" value="' + esc(r.Nombre) + '" required></div>' +
+    '<div class="field"><label>Nota</label><input type="text" id="er_nota" value="' + esc(r.Nota) + '"></div>';
+  abrirModal('Editar ruta', cuerpo, () => guardarEdicionRuta(idRuta), 'Guardar cambios');
+}
+
+async function guardarEdicionRuta(idRuta) {
+  const nombre = document.getElementById('er_nombre').value.trim();
+  if (!nombre) { mostrarMsg('modalMsg', '⚠️ El nombre de la ruta es obligatorio.', 'error'); return; }
+  try {
+    await logic.actualizarRuta(idRuta, { Nombre: nombre, Nota: document.getElementById('er_nota').value.trim() });
+    cerrarModal();
+    await refrescarRutas();
+    intentarSincronizar();
+  } catch (e) { manejarError(e, 'modalMsg'); }
 }
 
 async function submitNuevaRuta(ev) {
@@ -997,6 +1207,7 @@ async function refrescarCobradores() {
         '<small>Rutas: ' + (rutas.length ? esc(rutas.join(', ')) : '—') + '</small>' +
         '<div class="ri-acciones">' +
           '<button type="button" class="btn chico secundario" onclick="alternarActivoCobrador(\'' + c.id + '\', ' + (!c.Activo) + ')">' + (c.Activo ? 'Desactivar' : 'Activar') + '</button>' +
+          '<button type="button" class="btn chico secundario" onclick="mostrarModalEditarCobrador(\'' + c.id + '\')">✏️ Editar</button>' +
         '</div>' +
       '</div></div>';
   }).join('');
@@ -1008,6 +1219,28 @@ async function alternarActivoCobrador(idCobrador, nuevoValor) {
     intentarSincronizar();
     await refrescarCobradores();
   } catch (e) { manejarError(e, 'cobradorMsg'); }
+}
+
+function mostrarModalEditarCobrador(idCobrador) {
+  const c = cobradoresCache.find((x) => x.id === idCobrador);
+  if (!c) return;
+  const cuerpo =
+    '<div class="field"><label>Nombre *</label><input type="text" id="ecb_nombre" value="' + esc(c.Nombre) + '" required></div>' +
+    '<div class="field"><label>Correo de Google *</label><input type="email" id="ecb_email" value="' + esc(c.Email) + '" required></div>' +
+    '<div class="field"><label>Teléfono</label><input type="text" id="ecb_telefono" value="' + esc(c.Telefono) + '"></div>';
+  abrirModal('Editar cobrador', cuerpo, () => guardarEdicionCobrador(idCobrador), 'Guardar cambios');
+}
+
+async function guardarEdicionCobrador(idCobrador) {
+  const nombre = document.getElementById('ecb_nombre').value.trim();
+  const email = document.getElementById('ecb_email').value.trim();
+  if (!nombre || !email) { mostrarMsg('modalMsg', '⚠️ El nombre y el correo son obligatorios.', 'error'); return; }
+  try {
+    await logic.actualizarCobrador(idCobrador, { Nombre: nombre, Email: email, Telefono: document.getElementById('ecb_telefono').value.trim() });
+    cerrarModal();
+    await refrescarCobradores();
+    intentarSincronizar();
+  } catch (e) { manejarError(e, 'modalMsg'); }
 }
 
 async function submitNuevoCobrador(ev) {
@@ -1130,6 +1363,7 @@ async function poblarDatalistInversionistas() {
 async function refrescarCapital() {
   await poblarDatalistInversionistas();
   const resumen = await logic.obtenerResumenCapital();
+  capitalCache = resumen.inyecciones;
   renderResumenCapital(resumen);
   renderHistorialCapital(resumen.inyecciones);
 }
@@ -1163,9 +1397,53 @@ function renderHistorialCapital(inyecciones) {
     (c.Nota ? '<small>' + esc(c.Nota) + '</small>' : '') + '</div>' +
     '<div class="row" style="align-items:center; gap:8px;">' +
       '<strong>' + money(c.Monto) + '</strong>' +
+      '<button type="button" class="btn chico secundario" onclick="mostrarModalEditarCapital(\'' + c.id + '\')">✏️ Editar</button>' +
       '<button type="button" class="btn chico secundario" onclick="eliminarInyeccionCapital(\'' + c.id + '\')">Eliminar</button>' +
     '</div></div>'
   ).join('');
+}
+
+function mostrarModalEditarCapital(id) {
+  const c = capitalCache.find((x) => x.id === id);
+  if (!c) return;
+  const cuerpo =
+    '<div class="row">' +
+      '<div class="field"><label>Fecha</label><input type="date" id="eca_fecha" value="' + esc(c.Fecha) + '"></div>' +
+      '<div class="field"><label>Monto *</label><input type="text" inputmode="numeric" id="eca_monto" value="' + money(c.Monto) + '" required oninput="formatearInputMoneda(this)"></div>' +
+      '<div class="field">' +
+        '<label>Origen</label>' +
+        '<select id="eca_tipo" onchange="onTipoCapitalEditChange()">' +
+          '<option value="Propio"' + (c.Tipo !== 'Inversionista' ? ' selected' : '') + '>Recursos propios</option>' +
+          '<option value="Inversionista"' + (c.Tipo === 'Inversionista' ? ' selected' : '') + '>Inversionista</option>' +
+        '</select>' +
+      '</div>' +
+    '</div>' +
+    '<div class="row" id="eca_inversionistaWrap" style="' + (c.Tipo === 'Inversionista' ? '' : 'display:none;') + '">' +
+      '<div class="field"><label>Nombre del inversionista *</label><input type="text" id="eca_inversionista" value="' + esc(c.Inversionista) + '" list="dl_inversionistas"></div>' +
+    '</div>' +
+    '<div class="field"><label>Nota</label><input type="text" id="eca_nota" value="' + esc(c.Nota) + '"></div>';
+  abrirModal('Editar inyección de capital', cuerpo, () => guardarEdicionCapital(id), 'Guardar cambios');
+}
+
+function onTipoCapitalEditChange() {
+  const esInversionista = document.getElementById('eca_tipo').value === 'Inversionista';
+  document.getElementById('eca_inversionistaWrap').style.display = esInversionista ? '' : 'none';
+}
+
+async function guardarEdicionCapital(id) {
+  const datos = {
+    Fecha: document.getElementById('eca_fecha').value,
+    Monto: limpiarNumero(document.getElementById('eca_monto').value),
+    Tipo: document.getElementById('eca_tipo').value,
+    Inversionista: document.getElementById('eca_inversionista').value.trim(),
+    Nota: document.getElementById('eca_nota').value.trim()
+  };
+  try {
+    await logic.actualizarCapital(id, datos);
+    cerrarModal();
+    await refrescarCapital();
+    intentarSincronizar();
+  } catch (e) { manejarError(e, 'modalMsg'); }
 }
 
 async function submitCapital(ev) {
