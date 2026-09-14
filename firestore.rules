@@ -1,0 +1,32 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Cuentas de respaldo: siempre tienen acceso, aunque no estén en la lista de
+    // Configuración → 🔒 Acceso a la app, para que nunca quedes bloqueado por accidente.
+    // Debe coincidir con CORREOS_RESPALDO en public/js/logic.js.
+    function esRespaldo() {
+      return ['csilva0725@gmail.com', 'sergiosamir330@gmail.com']
+        .hasAny([request.auth.token.email.lower()]);
+    }
+
+    // Autorizado = cuenta de respaldo, o su correo está dentro de la lista blanca
+    // guardada en el propio documento (config.correosAutorizados).
+    function correoAutorizado() {
+      return esRespaldo() ||
+        (resource.data.config != null &&
+         resource.data.config.correosAutorizados != null &&
+         resource.data.config.correosAutorizados.hasAny([request.auth.token.email.lower()]));
+    }
+
+    match /sync/maestro {
+      allow get: if request.auth != null && correoAutorizado();
+      allow update: if request.auth != null && correoAutorizado();
+      // "create" solo lo puede hacer una cuenta de respaldo: es la única forma de crear el
+      // documento la primera vez (antes de que exista, no hay config.correosAutorizados que
+      // consultar).
+      allow create: if request.auth != null && esRespaldo();
+      allow delete: if false;
+    }
+  }
+}

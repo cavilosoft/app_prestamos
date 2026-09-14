@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Gestión de Préstamos</title>
+  <meta name="theme-color" content="#2054c7">
+  <meta name="description" content="Gestión de préstamos con base de datos local y sincronización a Firebase">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div id="lockScreen" class="lock-screen" style="display:flex;">
+  <div class="lock-card">
+    <div class="lock-icono">💰</div>
+    <h1>Gestión de Préstamos</h1>
+    <p class="muted">Inicia sesión con la cuenta de Google autorizada para entrar a la app.</p>
+    <button class="btn" id="btnIniciarSesionGoogle" onclick="onClicIniciarSesionGoogle()" style="display:none;">Iniciar sesión con Google</button>
+    <div id="lockMsg" class="msg info">Verificando sesión…</div>
+  </div>
+</div>
+
+<div id="appShell" style="display:none;">
+
+<header>
+  <h1>💰 Gestión de Préstamos</h1>
+  <div id="syncBar">
+    <span id="syncTexto"><span class="punto warn"></span>Iniciando…</span>
+    <button id="btnSync" onclick="onClicSincronizar()">Sincronizar</button>
+    <button class="btn chico secundario" onclick="cerrarSesionApp()" title="Cerrar sesión">Salir</button>
+  </div>
+</header>
+
+<nav id="nav">
+  <button data-tab="clientes" class="active">👥 Clientes</button>
+  <button data-tab="dashboard">📊 Dashboard</button>
+  <button data-tab="rutas" id="navRutas">🛣️ Rutas</button>
+  <button data-tab="cobradores" id="navCobradores">🧑‍💼 Cobradores</button>
+  <button data-tab="configuracion">⚙️ Configuración</button>
+</nav>
+
+<main>
+
+  <!-- ==================== TAB: CLIENTES ==================== -->
+  <section id="tab-clientes" class="tab active">
+
+    <!-- ---- Vista: lista de clientes ---- -->
+    <div id="vc_lista" class="vista">
+      <div class="card">
+        <h2>Clientes</h2>
+        <div class="row">
+          <div class="field"><label>Buscar</label><input type="text" id="cl_buscar" placeholder="Cédula, nombre o celular" oninput="onFiltroClientesChange()"></div>
+          <div class="field"><label>Ciudad</label><select id="cl_ciudad" onchange="onFiltroClientesChange()"><option value="">Todas</option></select></div>
+          <div class="field"><label>Ruta</label><select id="cl_ruta" onchange="onFiltroClientesChange()"><option value="">Todas</option></select></div>
+          <div class="field" id="cl_cobradorWrap"><label>Cobrador</label><select id="cl_cobrador" onchange="onFiltroClientesChange()"><option value="">Todos</option></select></div>
+          <div class="field">
+            <label>Clientes por página</label>
+            <select id="cl_tamano" onchange="onFiltroClientesChange()">
+              <option value="10">10</option>
+              <option value="20" selected>20</option>
+              <option value="50">50</option>
+            </select>
+          </div>
+        </div>
+        <button class="btn" onclick="mostrarFormNuevoCliente()">➕ Nuevo cliente</button>
+      </div>
+      <div id="cl_listaContenido"></div>
+      <div id="cl_paginacion" class="paginacion"></div>
+    </div>
+
+    <!-- ---- Vista: nuevo cliente ---- -->
+    <div id="vc_nuevoCliente" class="vista" style="display:none;">
+      <div class="card">
+        <button type="button" class="btn chico secundario" onclick="mostrarVista('lista')">← Volver a la lista</button>
+        <h2 style="margin-top:14px;">Registrar nuevo cliente</h2>
+        <div id="nuevoClienteMsg"></div>
+        <form id="formNuevoCliente" onsubmit="return submitNuevoCliente(event)">
+          <div class="row">
+            <div class="field"><label>Cédula *</label><input type="text" id="nc_cedula" required></div>
+            <div class="field"><label>Celular</label><input type="text" id="nc_celular"></div>
+          </div>
+          <div class="row">
+            <div class="field"><label>Nombres *</label><input type="text" id="nc_nombres" required></div>
+            <div class="field"><label>Apellidos</label><input type="text" id="nc_apellidos"></div>
+          </div>
+          <div class="row">
+            <div class="field"><label>Dirección</label><input type="text" id="nc_direccion"></div>
+            <div class="field"><label>Ciudad</label><input type="text" id="nc_ciudad"></div>
+          </div>
+          <div class="row">
+            <div class="field"><label>Ruta</label>
+              <select id="nc_ruta"><option value="">Sin ruta asignada</option></select>
+            </div>
+            <div class="field"><label>Geolocalización (lat, lng)</label><input type="text" id="nc_geo" placeholder="4.710989, -74.072092"></div>
+            <div class="field" style="display:flex; align-items:flex-end;">
+              <button type="button" class="btn secundario" style="width:100%" onclick="usarUbicacion()">📍 Usar mi ubicación</button>
+            </div>
+          </div>
+          <div class="row">
+            <div class="field"><label>Ocupación</label><input type="text" id="nc_ocupacion"></div>
+            <div class="field"><label>Punto de referencia</label><input type="text" id="nc_referencia"></div>
+          </div>
+          <div class="field"><label>Nota</label><textarea id="nc_nota"></textarea></div>
+          <button class="btn" type="submit" id="btnGuardarCliente">Guardar cliente</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- ---- Vista: detalle de cliente ---- -->
+    <div id="vc_detalleCliente" class="vista" style="display:none;">
+      <div class="card">
+        <button type="button" class="btn chico secundario" onclick="mostrarVista('lista')">← Volver a la lista</button>
+        <div id="dc_infoCliente" style="margin-top:14px;"></div>
+      </div>
+      <div class="card">
+        <h2>Préstamos de este cliente</h2>
+        <div class="row">
+          <div class="field">
+            <label>Filtrar por estado</label>
+            <select id="dp_filtroEstado" onchange="onFiltroPrestamosChange()">
+              <option value="">Todos los estados</option>
+              <option value="Activo">Activo</option>
+              <option value="Mora">Mora</option>
+              <option value="Pagado">Pagado</option>
+              <option value="Cancelado">Cancelado</option>
+            </select>
+          </div>
+        </div>
+        <button class="btn" onclick="mostrarFormNuevoPrestamo()">➕ Registrar nuevo préstamo</button>
+        <div id="dc_listaPrestamos" style="margin-top:12px;"></div>
+        <div id="dc_paginacion" class="paginacion"></div>
+      </div>
+    </div>
+
+    <!-- ---- Vista: nuevo préstamo ---- -->
+    <div id="vc_nuevoPrestamo" class="vista" style="display:none;">
+      <div class="card">
+        <button type="button" class="btn chico secundario" onclick="mostrarDetalleCliente(clienteActualId)">← Volver al cliente</button>
+        <h2 style="margin-top:14px;">Nuevo préstamo para <span id="np_nombreCliente" class="muted"></span></h2>
+        <div id="nuevoPrestamoMsg"></div>
+        <form id="formNuevoPrestamo" onsubmit="return submitNuevoPrestamo(event)">
+          <div class="row">
+            <div class="field"><label>Fecha del préstamo</label><input type="date" id="np_fecha" required oninput="onPlanPagosParamsChange()"></div>
+            <div class="field"><label>Monto prestado *</label><input type="text" inputmode="numeric" id="np_monto" required placeholder="$ 0" oninput="onMontoPrestadoInput()"></div>
+          </div>
+          <div class="row">
+            <div class="field"><label>% Seguro</label><input type="number" step="0.01" id="np_pSeguro" oninput="recalcularPrestamo('seguro')"></div>
+            <div class="field"><label>Valor del seguro</label><input type="text" inputmode="numeric" id="np_valorSeguro" placeholder="$ 0" oninput="onValorSeguroInput()"></div>
+            <div class="field"><label>Monto entregado al cliente</label><input type="text" inputmode="numeric" id="np_montoEntregado" placeholder="$ 0" oninput="onMontoEntregadoInput()"></div>
+          </div>
+          <div class="row">
+            <div class="field"><label>% Interés (sugerido)</label><input type="number" step="0.01" id="np_pInteres" oninput="recalcularPrestamo('interes')"></div>
+            <div class="field"><label>Valor del interés</label><input type="text" inputmode="numeric" id="np_valorInteres" placeholder="$ 0" oninput="onValorInteresInput()"></div>
+            <div class="field">
+              <label>Monto a pagar (sugerido — puedes editarlo)</label>
+              <input type="text" inputmode="numeric" id="np_montoAPagar" placeholder="$ 0" oninput="onMontoAPagarInput()">
+            </div>
+          </div>
+
+          <h3 style="font-size:13px; margin:16px 0 4px; color:var(--gris);">Plan de pagos</h3>
+          <p class="muted" style="margin:0 0 10px;">Indica en cuántas cuotas se paga y cada cuánto. El valor y la fecha de cada cuota se calculan solos, pero puedes editarlos.</p>
+          <div class="row">
+            <div class="field"><label>Número de cuotas *</label><input type="number" min="1" max="60" step="1" id="np_numCuotas" value="1" required oninput="onPlanPagosParamsChange()"></div>
+            <div class="field">
+              <label>Frecuencia entre cuotas</label>
+              <select id="np_frecuencia" onchange="onPlanPagosParamsChange()">
+                <option>Diario</option><option>Semanal</option><option>Quincenal</option><option>Mensual</option><option id="np_opcionUnicoPago" selected>Único pago</option>
+              </select>
+            </div>
+          </div>
+          <div id="np_planPagos"></div>
+          <div class="muted" id="np_planPagosTotal" style="margin:6px 0 4px;"></div>
+
+          <div class="field" style="margin-top:10px;"><label>Nota</label><textarea id="np_nota"></textarea></div>
+          <button class="btn" type="submit" id="btnGuardarPrestamo">Guardar préstamo</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- ---- Vista: detalle de préstamo ---- -->
+    <div id="vc_detallePrestamo" class="vista" style="display:none;">
+      <div class="card">
+        <button type="button" class="btn chico secundario" onclick="mostrarDetalleCliente(clienteActualId)">← Volver al cliente</button>
+        <div id="dp_resumen" style="margin-top:14px;"></div>
+      </div>
+
+      <div class="card" id="abonoCard">
+        <h2>💵 Registrar abono</h2>
+        <div id="abonoMsg"></div>
+        <form id="formAbono" onsubmit="return submitAbono(event)">
+          <div class="row">
+            <div class="field"><label>Fecha del abono</label><input type="date" id="ab_fecha" required></div>
+            <div class="field"><label>Valor del abono *</label><input type="text" inputmode="numeric" id="ab_valor" required placeholder="$ 0" oninput="formatearInputMoneda(this)"></div>
+          </div>
+          <div class="field"><label>Nota</label><input type="text" id="ab_nota"></div>
+          <button class="btn" type="submit" id="btnGuardarAbono">Registrar abono</button>
+        </form>
+      </div>
+
+      <div class="card">
+        <h2>Historial</h2>
+        <div id="dp_historial"></div>
+      </div>
+
+      <div class="card" id="rq_card">
+        <h2>🔄 Retanquear préstamo</h2>
+        <p class="muted">Recibe un abono (opcional) y presta más dinero sobre este mismo préstamo, actualizando el plazo.</p>
+        <div id="retanqueoMsg"></div>
+        <form id="formRetanqueo" onsubmit="return submitRetanqueo(event)">
+          <div class="row">
+            <div class="field"><label>Fecha</label><input type="date" id="rq_fecha" required></div>
+            <div class="field"><label>Valor del abono (opcional)</label><input type="text" inputmode="numeric" id="rq_valorAbono" placeholder="$ 0" oninput="onMontoAdicionalInput()"></div>
+            <div class="field"><label>Monto adicional a prestar *</label><input type="text" inputmode="numeric" id="rq_montoAdicional" required placeholder="$ 0" oninput="onMontoAdicionalInput()"></div>
+          </div>
+          <div class="row">
+            <div class="field"><label>% Seguro</label><input type="number" step="0.01" id="rq_pSeguro" oninput="recalcularRetanqueo('seguro')"></div>
+            <div class="field"><label>Valor del seguro adicional</label><input type="text" id="rq_valorSeguro" readonly></div>
+          </div>
+          <div class="row">
+            <div class="field"><label>% Interés (sugerido)</label><input type="number" step="0.01" id="rq_pInteres" oninput="recalcularRetanqueo('interes')"></div>
+            <div class="field"><label>Valor del interés adicional</label><input type="text" id="rq_valorInteres" readonly></div>
+            <div class="field">
+              <label>Nuevo monto a pagar (sugerido — puedes editarlo)</label>
+              <input type="text" inputmode="numeric" id="rq_montoAPagar" placeholder="$ 0" oninput="onMontoAPagarRetanqueoInput()">
+            </div>
+          </div>
+          <div class="row">
+            <div class="field"><label>Nueva fecha de pago *</label><input type="date" id="rq_fechaPago" required></div>
+          </div>
+          <div class="field"><label>Nota</label><input type="text" id="rq_nota"></div>
+          <button class="btn" type="submit" id="btnGuardarRetanqueo">Retanquear préstamo</button>
+        </form>
+      </div>
+    </div>
+
+  </section>
+
+  <!-- ==================== TAB: DASHBOARD ==================== -->
+  <section id="tab-dashboard" class="tab">
+    <div class="card">
+      <h2>Filtros</h2>
+      <div class="row">
+        <div class="field"><label>Cliente</label><select id="db_cliente"><option value="">Todos los clientes</option></select></div>
+        <div class="field"><label>Ruta</label><select id="db_ruta"><option value="">Todas las rutas</option></select></div>
+        <div class="field" id="db_cobradorWrap"><label>Cobrador</label><select id="db_cobrador"><option value="">Todos los cobradores</option></select></div>
+        <div class="field"><label>Desde</label><input type="date" id="db_desde"></div>
+        <div class="field"><label>Hasta</label><input type="date" id="db_hasta"></div>
+        <div class="field" style="display:flex; align-items:flex-end;">
+          <button class="btn" style="width:100%" onclick="cargarDashboard()">Aplicar filtro</button>
+        </div>
+      </div>
+    </div>
+    <div class="kpis" id="db_kpis"></div>
+    <div class="card"><h2>Estado de créditos</h2><div id="db_estados"></div></div>
+  </section>
+
+  <!-- ==================== TAB: RUTAS ==================== -->
+  <section id="tab-rutas" class="tab">
+    <div class="card">
+      <h2>Crear ruta</h2>
+      <div id="rutaMsg"></div>
+      <form id="formNuevaRuta" onsubmit="return submitNuevaRuta(event)">
+        <div class="row">
+          <div class="field"><label>Nombre de la ruta *</label><input type="text" id="rt_nombre" required></div>
+          <div class="field"><label>Cobrador asignado</label><select id="rt_cobrador"><option value="">Sin cobrador asignado</option></select></div>
+        </div>
+        <div class="field"><label>Nota</label><input type="text" id="rt_nota"></div>
+        <button class="btn" type="submit" id="btnGuardarRuta">Guardar ruta</button>
+      </form>
+    </div>
+    <div class="card">
+      <h2>Rutas registradas</h2>
+      <div id="rt_lista"></div>
+    </div>
+  </section>
+
+  <!-- ==================== TAB: COBRADORES ==================== -->
+  <section id="tab-cobradores" class="tab">
+    <div class="card">
+      <h2>Crear cobrador</h2>
+      <p class="muted">El correo debe ser una cuenta de Google real: con ella el cobrador podrá iniciar sesión en esta app y ver únicamente los clientes de sus rutas.</p>
+      <div id="cobradorMsg"></div>
+      <form id="formNuevoCobrador" onsubmit="return submitNuevoCobrador(event)">
+        <div class="row">
+          <div class="field"><label>Nombre *</label><input type="text" id="cb_nombre" required></div>
+          <div class="field"><label>Correo de Google *</label><input type="email" id="cb_email" required></div>
+          <div class="field"><label>Teléfono</label><input type="text" id="cb_telefono"></div>
+        </div>
+        <button class="btn" type="submit" id="btnGuardarCobrador">Guardar cobrador</button>
+      </form>
+    </div>
+    <div class="card">
+      <h2>Cobradores registrados</h2>
+      <div id="cb_lista"></div>
+    </div>
+  </section>
+
+  <!-- ==================== TAB: CONFIGURACION ==================== -->
+  <section id="tab-configuracion" class="tab">
+    <div class="card">
+      <h2>Sincronización</h2>
+      <p class="muted">Tus datos se guardan primero en este dispositivo (funcionan sin internet) y se sincronizan
+        con Firebase — usando la misma cuenta con la que iniciaste sesión — al abrir la app, cada minuto, y cuando
+        pulsas "Sincronizar ahora". Así el portátil y el celular quedan al día sin pasos adicionales.</p>
+      <p class="muted">Estado: <strong id="cap_estadoDrive">—</strong></p>
+      <div id="driveMsg"></div>
+      <div class="row">
+        <button class="btn secundario chico" id="btnSyncConfig" onclick="onClicSincronizar()">Sincronizar ahora</button>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Parámetros del sistema</h2>
+      <p class="muted">Se usan como sugerencia por defecto al crear un nuevo préstamo o retanqueo. Siempre se pueden ajustar manualmente.</p>
+      <div id="configMsg"></div>
+      <form id="formConfig" onsubmit="return submitConfig(event)">
+        <div class="row">
+          <div class="field"><label>% Interés sugerido</label><input type="number" step="0.01" id="cfg_interes" required></div>
+          <div class="field"><label>% Seguro sugerido</label><input type="number" step="0.01" id="cfg_seguro" required></div>
+          <div class="field"><label>Moneda</label><input type="text" id="cfg_moneda" required></div>
+        </div>
+        <div class="row">
+          <div class="field">
+            <label>Plante inicial (capital con el que arrancó el negocio)</label>
+            <input type="text" inputmode="numeric" id="cfg_capitalInicial" placeholder="$ 0" oninput="formatearInputMoneda(this)">
+          </div>
+        </div>
+        <button class="btn" type="submit">Guardar configuración</button>
+      </form>
+    </div>
+
+    <div class="card" id="capitalCard">
+      <h2>💰 Capital de trabajo</h2>
+      <p class="muted">El plante inicial (arriba) más cada inyección de capital que registres aquí, propia o de un inversionista.</p>
+      <div class="kpis" id="cap_kpis"></div>
+    </div>
+
+    <div class="card" id="capitalCard2">
+      <h2>Registrar inyección de capital</h2>
+      <div id="capitalMsg"></div>
+      <form id="formCapital" onsubmit="return submitCapital(event)">
+        <div class="row">
+          <div class="field"><label>Fecha</label><input type="date" id="cap_fecha" required></div>
+          <div class="field"><label>Monto *</label><input type="text" inputmode="numeric" id="cap_monto" required placeholder="$ 0" oninput="formatearInputMoneda(this)"></div>
+          <div class="field">
+            <label>Origen</label>
+            <select id="cap_tipo" onchange="onTipoCapitalChange()">
+              <option value="Propio">Recursos propios</option>
+              <option value="Inversionista">Inversionista</option>
+            </select>
+          </div>
+        </div>
+        <div class="row" id="cap_inversionistaWrap" style="display:none;">
+          <div class="field">
+            <label>Nombre del inversionista *</label>
+            <input type="text" id="cap_inversionista" list="dl_inversionistas" placeholder="Ej: Juan Pérez">
+            <datalist id="dl_inversionistas"></datalist>
+          </div>
+        </div>
+        <div class="field"><label>Nota</label><input type="text" id="cap_nota"></div>
+        <button class="btn" type="submit" id="btnGuardarCapital">Registrar inyección</button>
+      </form>
+    </div>
+
+    <div class="card" id="capitalCard3">
+      <h2>Historial de inyecciones de capital</h2>
+      <div id="cap_historial"></div>
+    </div>
+
+    <div class="card">
+      <h2>🔒 Acceso a la app</h2>
+      <div id="accesoMsg"></div>
+      <form class="row" onsubmit="return onClicAgregarCorreo(event)">
+        <div class="field" style="flex:1 1 220px;">
+          <label>Agregar correo autorizado</label>
+          <input type="email" id="acceso_correo" placeholder="correo@gmail.com" required>
+        </div>
+        <div class="field" style="flex:0 0 auto; align-self:flex-end;">
+          <button class="btn chico" type="submit">Agregar</button>
+        </div>
+      </form>
+      <div id="accesoLista"></div>
+    </div>
+  </section>
+
+</main>
+
+<!-- Modal genérico de confirmación (reemplaza confirm()/alert() del navegador) -->
+<div id="modalOverlay" class="modal-overlay" style="display:none;" onclick="onClicOverlayModal(event)">
+  <div class="modal-card" onclick="event.stopPropagation()">
+    <h3 id="modalTitulo"></h3>
+    <div id="modalCuerpo"></div>
+    <div id="modalMsg"></div>
+    <div class="modal-acciones">
+      <button type="button" class="btn secundario" onclick="cerrarModal()">Cancelar</button>
+      <button type="button" class="btn" id="modalBtnConfirmar" onclick="onClicConfirmarModal()">Confirmar</button>
+    </div>
+  </div>
+</div>
+
+</div><!-- /#appShell -->
+
+<script src="https://www.gstatic.com/firebasejs/12.18.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/12.18.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore-compat.js"></script>
+<script src="js/idb.js"></script>
+<script src="js/logic.js"></script>
+<script src="js/firebase-sync.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
