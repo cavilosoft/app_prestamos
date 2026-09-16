@@ -94,7 +94,7 @@
     <!-- ---- Vista: nuevo cliente ---- -->
     <div id="vc_nuevoCliente" class="vista" style="display:none;">
       <div class="card">
-        <button type="button" class="btn chico secundario" onclick="mostrarVista('lista')">← Volver a la lista</button>
+        <button type="button" class="btn chico secundario" onclick="volverAListaClientes()">← Volver a la lista</button>
         <h2 style="margin-top:14px;">Registrar nuevo cliente</h2>
         <div id="nuevoClienteMsg"></div>
         <form id="formNuevoCliente" onsubmit="return submitNuevoCliente(event)">
@@ -132,7 +132,7 @@
     <!-- ---- Vista: detalle de cliente ---- -->
     <div id="vc_detalleCliente" class="vista" style="display:none;">
       <div class="card">
-        <button type="button" class="btn chico secundario" onclick="mostrarVista('lista')">← Volver a la lista</button>
+        <button type="button" class="btn chico secundario" onclick="volverAListaClientes()">← Volver a la lista</button>
         <div id="dc_infoCliente" style="margin-top:14px;"></div>
       </div>
       <div class="card">

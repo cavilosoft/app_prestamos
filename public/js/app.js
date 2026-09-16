@@ -97,6 +97,16 @@ function mostrarVista(nombre) {
   document.getElementById('vc_' + nombre).style.display = '';
 }
 
+/** Botón "← Volver a la lista": a diferencia de mostrarDetalleCliente() (que siempre relee el
+ *  cliente desde IndexedDB), mostrarVista('lista') por sí sola solo cambia qué se ve, sin
+ *  refrescar el contenido — así que si se editó un cliente o alguno de sus préstamos antes de
+ *  volver, la lista se vería desactualizada hasta el siguiente cambio de filtro. Por eso el
+ *  botón pasa por aquí en vez de llamar a mostrarVista('lista') directamente. */
+async function volverAListaClientes() {
+  mostrarVista('lista');
+  await refrescarListaClientes();
+}
+
 async function recargarCaches() {
   rutasCache = await logic.listarRutas();
   cobradoresCache = await logic.listarCobradores();
