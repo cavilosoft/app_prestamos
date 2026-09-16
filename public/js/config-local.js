@@ -13,12 +13,12 @@
 // Configuración del proyecto → "Tus apps" → selecciona (o crea) una app web →
 // "Configuración del SDK" (ver INSTRUCCIONES.md, Parte 2.4).
 const FIREBASE_CONFIG = {
-  apiKey: 'TU_API_KEY_AQUI',
-  authDomain: 'TU_PROYECTO.firebaseapp.com',
-  projectId: 'TU_PROYECTO',
-  storageBucket: 'TU_PROYECTO.appspot.com',
-  messagingSenderId: 'TU_SENDER_ID',
-  appId: 'TU_APP_ID'
+  apiKey: "AIzaSyBjK7gSTufq5Ez_ai9hX2Lr0CnAAM1lqis",
+  authDomain: "app-gestion-prestamos.firebaseapp.com",
+  projectId: "app-gestion-prestamos",
+  storageBucket: "app-gestion-prestamos.firebasestorage.app",
+  messagingSenderId: "589201985413",
+  appId: "1:589201985413:web:6308aacd446d54ab88feec"
 };
 
 // Cuentas de Google que SIEMPRE pueden entrar a la app y sincronizar, aunque se borren
@@ -26,4 +26,4 @@ const FIREBASE_CONFIG = {
 // bloqueado de su propia app. Deben coincidir EXACTAMENTE con la lista de
 // firestore.rules (función esRespaldo()) — si cambias una, cambia la otra también y
 // vuelve a publicar las reglas en Firebase Console.
-const CORREOS_RESPALDO = ['csilva0725@gmail.com', 'sergiosamir330@gmail.com'];
+const CORREOS_RESPALDO = ['clsilvarolon@gmail.com'];

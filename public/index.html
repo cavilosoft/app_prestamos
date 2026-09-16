@@ -28,7 +28,7 @@
   <div class="lock-card">
     <div class="lock-icono">🔒</div>
     <h1>Ingresa tu PIN</h1>
-    <p class="muted">Este dispositivo tiene activado un PIN de acceso adicional.</p>
+    <p class="muted">Esta app tiene activado un PIN de acceso adicional.</p>
     <form onsubmit="return onSubmitPinScreen(event)">
       <input type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4" id="pinScreenInput" class="pin-input" placeholder="••••" autocomplete="off">
       <button class="btn" type="submit">Entrar</button>
@@ -390,14 +390,14 @@
     </div>
 
     <div class="card">
-      <h2>🔒 PIN de acceso (este dispositivo)</h2>
-      <p class="muted">Capa extra de seguridad: si se activa, cada vez que se abra la app en <strong>este
-        dispositivo</strong> (después de iniciar sesión con Google) se pedirá un PIN de 4 dígitos. Se
-        guarda solo en este dispositivo — no se sincroniza con Firebase ni con otros dispositivos, así
-        que cada uno tiene su propio PIN independiente. No hay límite de intentos.</p>
+      <h2>🔒 PIN de acceso</h2>
+      <p class="muted">Capa extra de seguridad: si se activa, cada vez que se abra la app (en cualquier
+        dispositivo, después de iniciar sesión con Google) se pedirá un PIN de 4 dígitos. Se guarda junto
+        con el resto de la configuración y se sincroniza automáticamente — se activa o se cambia una sola
+        vez y queda igual en todos los dispositivos. No hay límite de intentos.</p>
       <label style="display:flex; align-items:center; gap:8px; font-size:14px; cursor:pointer;">
         <input type="checkbox" id="pin_activo" onchange="onToggleAppLock(this)" style="width:auto;">
-        Activar PIN de acceso en este dispositivo
+        Activar PIN de acceso
       </label>
       <div id="pin_cambiarWrap" style="display:none; margin-top:10px;">
         <button type="button" class="btn chico secundario" onclick="mostrarModalCambiarPin()">Cambiar PIN</button>

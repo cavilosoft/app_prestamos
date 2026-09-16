@@ -78,9 +78,13 @@ function fusionarConfig(local, remoto) {
 
 async function getConfig() {
   const cfg = await idb.kvGet('config');
-  if (!cfg) return { interes: 20, seguro: 5, moneda: 'COP', capitalInicial: 0, updatedAt: nowISO() };
-  // Compatibilidad con configuraciones guardadas antes de que existiera el capital inicial.
+  if (!cfg) return { interes: 20, seguro: 5, moneda: 'COP', capitalInicial: 0, pinActivo: false, pinHash: null, updatedAt: nowISO() };
+  // Compatibilidad con configuraciones guardadas antes de que existiera el capital inicial
+  // o el PIN de acceso: si no existen todavía, se completan con sus valores por defecto (el
+  // PIN queda apagado, exactamente el mismo comportamiento que había antes de que existiera).
   if (cfg.capitalInicial === undefined) cfg.capitalInicial = 0;
+  if (cfg.pinActivo === undefined) cfg.pinActivo = false;
+  if (cfg.pinHash === undefined) cfg.pinHash = null;
   return cfg;
 }
 
@@ -149,6 +153,49 @@ async function estaCorreoAutorizado(correo) {
   if (CORREOS_RESPALDO.includes(limpio)) return true;
   const lista = await listarCorreosAutorizados();
   return lista.includes(limpio);
+}
+
+// -------------------------------------------------------------------------
+// PIN DE ACCESO (capa extra de seguridad, aparte del inicio de sesión con Google)
+// -------------------------------------------------------------------------
+// A diferencia de una primera versión de esta función (que guardaba el PIN solo en este
+// dispositivo), el PIN vive dentro de "config" — así que se sincroniza igual que el resto
+// de los parámetros del sistema: se activa/cambia una sola vez y queda igual en todos los
+// dispositivos, sin tener que repetir la configuración en cada uno. Nunca se guarda el PIN
+// en texto plano, solo su huella (hash) — ver _hashPin.
+
+async function _hashPin(pin) {
+  const datos = new TextEncoder().encode('prestamos-pwa-pin-v1:' + pin);
+  const buffer = await crypto.subtle.digest('SHA-256', datos);
+  return Array.from(new Uint8Array(buffer)).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function pinAccesoActivo() {
+  const cfg = await getConfig();
+  return !!(cfg.pinActivo && cfg.pinHash);
+}
+
+async function activarPinAcceso(pin) {
+  if (!/^\d{4}$/.test(String(pin || ''))) throw new Error('El PIN debe tener exactamente 4 dígitos.');
+  const pinHash = await _hashPin(pin);
+  const actual = await getConfig();
+  const cfg = Object.assign({}, actual, { pinActivo: true, pinHash, updatedAt: nowISO() });
+  await idb.kvSet('config', cfg);
+  return cfg;
+}
+
+async function desactivarPinAcceso() {
+  const actual = await getConfig();
+  const cfg = Object.assign({}, actual, { pinActivo: false, pinHash: null, updatedAt: nowISO() });
+  await idb.kvSet('config', cfg);
+  return cfg;
+}
+
+async function verificarPinAcceso(pin) {
+  const cfg = await getConfig();
+  if (!cfg.pinHash) return false;
+  const hash = await _hashPin(pin);
+  return hash === cfg.pinHash;
 }
 
 // -------------------------------------------------------------------------
@@ -1028,6 +1075,7 @@ window.logic = {
   ESTADOS, TIPOS_CAPITAL, nowISO, hoyISO, round2, generarId, fusionarColeccion, fusionarConfig,
   getConfig, guardarConfig,
   CORREOS_RESPALDO, listarCorreosAutorizados, agregarCorreoAutorizado, quitarCorreoAutorizado, estaCorreoAutorizado,
+  pinAccesoActivo, activarPinAcceso, desactivarPinAcceso, verificarPinAcceso,
   listarClientes, buscarClientes, listarClientesPaginado, listarCiudadesUsadas,
   obtenerCliente, crearCliente, actualizarCliente, reordenarClientes,
   listarRutas, obtenerRuta, crearRuta, actualizarRuta, contarClientesPorRuta,

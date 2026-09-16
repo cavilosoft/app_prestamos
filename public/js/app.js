@@ -190,6 +190,15 @@ function iniciales(nombre) {
 function round1(n) { return Math.round(Number(n) * 10) / 10; }
 function round2(n) { return Math.round(Number(n) * 100) / 100; }
 
+// Convierte una fecha guardada como 'YYYY-MM-DD' a 'DD/MM/YYYY' para mostrarla más
+// compacta en tablas. Si no tiene ese formato exacto, se devuelve tal cual.
+function fechaCorta(iso) {
+  if (!iso) return '—';
+  const partes = String(iso).split('-');
+  if (partes.length !== 3) return String(iso);
+  return partes[2] + '/' + partes[1] + '/' + partes[0];
+}
+
 // Quita todo lo que no sea dígito (símbolo de moneda, puntos de miles, espacios).
 function limpiarNumero(valorFormateado) {
   if (!valorFormateado) return 0;
@@ -309,11 +318,17 @@ function renderListaClientes(resultado, prestamosPorCliente, permiteOrdenar) {
     const ubicacion = (c.Ciudad ? esc(c.Ciudad) : '') + (c.ID_Ruta ? (c.Ciudad ? ' · ' : '') + 'Ruta: ' + esc(nombreRuta(c.ID_Ruta)) : '');
     const p = prestamosPorCliente[c.id];
     const infoPrestamo = p
-      ? '<div class="cl-prestamo">' +
-          '<span class="badge ' + p.Estado + '">' + p.Estado + '</span>' +
-          '<small>Prestado: ' + money(p.Monto_Prestado) + ' · Pagado: ' + money(p.Total_Abonado) + ' · A pagar: ' + money(p.Monto_A_Pagar) + '</small>' +
-          '<small>Fecha de pago: ' + esc(p.Fecha_Pago) + '</small>' +
-        '</div>'
+      ? '<div class="prestamo-mini-wrap"><table class="prestamo-mini">' +
+          '<thead><tr><th>Fecha</th><th>Estado</th><th>Valor</th><th>Recaudado</th><th>Total a pagar</th><th>Fecha Pago</th></tr></thead>' +
+          '<tbody><tr>' +
+            '<td>' + esc(fechaCorta(p.Fecha_Prestamo)) + '</td>' +
+            '<td class="pm-estado-' + p.Estado + '">' + p.Estado + '</td>' +
+            '<td>' + money(p.Monto_Prestado) + '</td>' +
+            '<td>' + money(p.Total_Abonado) + '</td>' +
+            '<td>' + money(p.Monto_A_Pagar) + '</td>' +
+            '<td>' + esc(fechaCorta(p.Fecha_Pago)) + '</td>' +
+          '</tr></tbody>' +
+        '</table></div>'
       : '';
     const manija = permiteOrdenar
       ? '<span class="ri-manija" title="Arrastra para ordenar" onpointerdown="iniciarArrastreCliente(event, \'' + c.id + '\')">⠿</span>'
@@ -1778,7 +1793,20 @@ async function mostrarApp(email) {
   window._correoSesionActual = email;
   await _resolverRestriccionCobrador(email);
 
-  if (await appLockActivo()) {
+  // El PIN se guarda dentro de "config" (ver logic.js), así que se sincroniza igual que el
+  // resto de los parámetros del sistema — se activa una sola vez y queda igual en todos los
+  // dispositivos. Por eso, antes de decidir si hay que pedirlo, se intenta sincronizar primero
+  // (si hay internet): así un dispositivo que recién inicia sesión ya sabe si el PIN está
+  // activo, aunque se haya encendido desde otro dispositivo. Si no hay internet, se sigue con
+  // lo último que se sincronizó en este dispositivo (igual que el resto de la app offline).
+  if (navigator.onLine && SYNC_HABILITADO) {
+    try {
+      const r = await firebaseSync.sincronizarAhora();
+      if (r.ok) CONFIG = await logic.getConfig();
+    } catch (e) { /* sin internet o con error: seguimos con lo que haya guardado localmente */ }
+  }
+
+  if (await logic.pinAccesoActivo()) {
     mostrarPantallaPin();
   } else {
     await _continuarMostrarApp();
@@ -1792,39 +1820,20 @@ async function _continuarMostrarApp() {
 }
 
 // -------------------------------------------------------------------
-// PIN DE ACCESO (bloqueo adicional, local a este dispositivo)
+// PIN DE ACCESO (bloqueo adicional, aparte del inicio de sesión con Google)
 // -------------------------------------------------------------------
-// Capa de seguridad extra, aparte del inicio de sesión con Google: si está activada, cada
-// vez que se abre la app (ya con la sesión de Google válida) se pide un PIN de 4 dígitos
-// antes de mostrar cualquier dato. Pensada para el caso de que alguien más tenga acceso
-// físico al celular/portátil con la sesión de Google ya iniciada.
+// Si está activado, cada vez que se abre la app (ya con la sesión de Google válida) se pide
+// un PIN de 4 dígitos antes de mostrar cualquier dato. Pensado para el caso de que alguien
+// más tenga acceso físico al celular/portátil con la sesión de Google ya iniciada.
 //
-// Dónde queda guardado: en IndexedDB de ESTE dispositivo únicamente (clave "appLock" en el
-// almacén "kv"), NUNCA en Firestore — a diferencia de "config" (parámetros del sistema),
-// esta clave no se sincroniza (ver firebase-sync.js: solo sincroniza idb.COLECCIONES y la
-// clave "config"). Por eso: (a) activarlo/desactivarlo o cambiarlo en un dispositivo no
-// afecta a los demás — cada uno tiene su propio PIN independiente; (b) no hay ningún riesgo
-// de que esto interfiera con la sincronización de los datos del negocio; (c) si se olvida el
-// PIN, la única forma de recuperarlo es borrar los datos del sitio en ese navegador (eso NO
-// borra la información del negocio, que vive en Firestore — al volver a entrar se sincroniza
-// de nuevo — pero si en ese momento había algo sin sincronizar aún, sí se perdería, así que
-// conviene sincronizar antes de tocar el PIN si hay dudas).
-// No hay límite de intentos: se puede volver a intentar las veces que haga falta.
-
-async function _hashPin(pin) {
-  const datos = new TextEncoder().encode('prestamos-pwa-pin-v1:' + pin);
-  const buffer = await crypto.subtle.digest('SHA-256', datos);
-  return Array.from(new Uint8Array(buffer)).map((b) => b.toString(16).padStart(2, '0')).join('');
-}
-
-async function obtenerAppLock() {
-  return idb.kvGet('appLock', { activo: false, pinHash: null });
-}
-
-async function appLockActivo() {
-  const al = await obtenerAppLock();
-  return !!(al && al.activo && al.pinHash);
-}
+// Dónde queda guardado: dentro de "config" (el mismo lugar donde se guardan el % de interés,
+// el % de seguro, etc.), y por lo tanto se sincroniza con Firestore igual que el resto de la
+// configuración del sistema (ver logic.js) — se activa o se cambia una sola vez y queda igual
+// en todos los dispositivos, sin tener que repetirlo en cada uno. Nunca se guarda el PIN en
+// texto plano, solo su huella (hash). No hay límite de intentos: se puede volver a intentar
+// las veces que haga falta. Si se olvida el PIN, hay que entrar desde otro dispositivo donde
+// siga con la sesión abierta (o desde Firebase Console, editando a mano el documento
+// sync/maestro → config → pinActivo a false) para desactivarlo.
 
 function mostrarPantallaPin() {
   document.getElementById('appShell').style.display = 'none';
@@ -1848,9 +1857,8 @@ async function onSubmitPinScreen(ev) {
     elMsg.className = 'msg error';
     return false;
   }
-  const al = await obtenerAppLock();
-  const hashIngresado = await _hashPin(pin);
-  if (hashIngresado !== al.pinHash) {
+  const correcto = await logic.verificarPinAcceso(pin);
+  if (!correcto) {
     elMsg.textContent = 'PIN incorrecto — intenta de nuevo.';
     elMsg.className = 'msg error';
     input.value = '';
@@ -1864,11 +1872,11 @@ async function onSubmitPinScreen(ev) {
 // ---- Configuración → activar/desactivar/cambiar el PIN ----
 
 async function refrescarSeccionPin() {
-  const al = await obtenerAppLock();
   const chk = document.getElementById('pin_activo');
   if (!chk) return;
-  chk.checked = !!al.activo;
-  document.getElementById('pin_cambiarWrap').style.display = al.activo ? '' : 'none';
+  const activo = await logic.pinAccesoActivo();
+  chk.checked = activo;
+  document.getElementById('pin_cambiarWrap').style.display = activo ? '' : 'none';
 }
 
 async function onToggleAppLock(chk) {
@@ -1876,9 +1884,10 @@ async function onToggleAppLock(chk) {
     chk.checked = false; // no se marca hasta confirmar el PIN en el modal
     mostrarModalDefinirPin(true);
   } else {
-    await idb.kvSet('appLock', { activo: false, pinHash: null, updatedAt: logic.nowISO() });
+    await logic.desactivarPinAcceso();
+    intentarSincronizar();
     await refrescarSeccionPin();
-    mostrarMsg('configMsg', 'PIN de acceso desactivado en este dispositivo.', 'ok');
+    mostrarMsg('configMsg', 'PIN de acceso desactivado — el cambio se sincroniza a los demás dispositivos.', 'ok');
   }
 }
 
@@ -1889,8 +1898,8 @@ function mostrarModalCambiarPin() {
 function mostrarModalDefinirPin(esActivacion) {
   const cuerpo =
     '<p class="muted">' + (esActivacion
-      ? 'Define el PIN de 4 dígitos que se pedirá cada vez que se abra la app en este dispositivo (después de iniciar sesión con Google).'
-      : 'Define el nuevo PIN de 4 dígitos para este dispositivo.') + '</p>' +
+      ? 'Define el PIN de 4 dígitos que se pedirá cada vez que se abra la app, en cualquier dispositivo, después de iniciar sesión con Google.'
+      : 'Define el nuevo PIN de 4 dígitos — se actualiza en todos los dispositivos al sincronizar.') + '</p>' +
     '<div class="row">' +
       '<div class="field"><label>PIN (4 dígitos) *</label><input type="password" inputmode="numeric" maxlength="4" id="pin_nuevo" autocomplete="off"></div>' +
       '<div class="field"><label>Confirmar PIN *</label><input type="password" inputmode="numeric" maxlength="4" id="pin_confirmar" autocomplete="off"></div>' +
@@ -1904,11 +1913,11 @@ async function guardarNuevoPin(esActivacion) {
   if (!/^\d{4}$/.test(pin)) { mostrarMsg('modalMsg', '⚠️ El PIN debe tener exactamente 4 dígitos.', 'error'); return; }
   if (pin !== confirmacion) { mostrarMsg('modalMsg', '⚠️ Los dos PIN no coinciden.', 'error'); return; }
 
-  const pinHash = await _hashPin(pin);
-  await idb.kvSet('appLock', { activo: true, pinHash, updatedAt: logic.nowISO() });
+  await logic.activarPinAcceso(pin);
+  intentarSincronizar();
   cerrarModal();
   await refrescarSeccionPin();
-  mostrarMsg('configMsg', esActivacion ? 'PIN de acceso activado en este dispositivo.' : 'PIN actualizado en este dispositivo.', 'ok');
+  mostrarMsg('configMsg', (esActivacion ? 'PIN de acceso activado' : 'PIN actualizado') + ' — se sincroniza a los demás dispositivos.', 'ok');
 }
 
 /** Decide si la cuenta que acaba de entrar ve toda la app (el dueño) o solo los clientes

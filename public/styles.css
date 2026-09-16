@@ -181,8 +181,16 @@ a.link { color: var(--azul); text-decoration: none; }
   padding: 6px 4px; touch-action: none; user-select: none;
 }
 .resultado-item.arrastrando { opacity: 0.5; background: var(--azul-claro); border-color: var(--azul); }
-.cl-prestamo { margin-top: 4px; padding-top: 4px; border-top: 1px dashed var(--borde); }
-.cl-prestamo .badge { margin-bottom: 2px; }
+.prestamo-mini-wrap { margin-top: 6px; overflow-x: auto; cursor: default; }
+.prestamo-mini { border-collapse: collapse; width: 100%; min-width: 480px; font-size: 12px; }
+.prestamo-mini th, .prestamo-mini td {
+  border: 1px solid var(--borde); padding: 5px 8px; text-align: center; white-space: nowrap;
+}
+.prestamo-mini th { background: var(--gris-claro); font-weight: 700; color: var(--texto); }
+.prestamo-mini td.pm-estado-Activo { color: var(--azul); font-weight: 700; }
+.prestamo-mini td.pm-estado-Pagado { color: var(--verde); font-weight: 700; }
+.prestamo-mini td.pm-estado-Mora { color: var(--rojo); font-weight: 700; }
+.prestamo-mini td.pm-estado-Cancelado { color: var(--gris); font-weight: 700; }
 .paginacion {
   display: flex; align-items: center; justify-content: space-between; gap: 10px;
   padding: 10px 2px; font-size: 12px;
