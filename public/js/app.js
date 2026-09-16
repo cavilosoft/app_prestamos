@@ -335,7 +335,6 @@ function renderListaClientes(resultado, prestamosPorCliente, permiteOrdenar) {
       : '';
     return '<div class="resultado-item' + (permiteOrdenar ? ' arrastrable' : '') + '" data-id-cliente="' + c.id + '" onclick="mostrarDetalleCliente(\'' + c.id + '\')">' +
       manija +
-      '<div class="ri-avatar">' + iniciales(nombre) + '</div>' +
       '<div class="ri-body">' +
         '<div class="ri-top"><strong>' + esc(nombre) + '</strong></div>' +
         '<small>Cédula: ' + esc(c.Cedula) + (c.Celular ? ' · Cel: ' + esc(c.Celular) : '') + '</small>' +
@@ -883,6 +882,10 @@ async function mostrarDetallePrestamo(idPrestamo) {
 async function refrescarDetallePrestamo() {
   prestamoActual = await logic.obtenerPrestamo(prestamoActualId);
   if (!prestamoActual) { mostrarVista('lista'); return; }
+
+  document.getElementById('dp_nombreCliente').textContent = clienteActual
+    ? (clienteActual.Nombres + ' ' + (clienteActual.Apellidos || '')).trim()
+    : '';
 
   renderResumenPrestamo(prestamoActual);
   renderHistorialPrestamo(prestamoActual);
