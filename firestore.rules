@@ -6,7 +6,7 @@ service cloud.firestore {
     // Configuración → 🔒 Acceso a la app, para que nunca quedes bloqueado por accidente.
     // Debe coincidir con CORREOS_RESPALDO en public/js/config-local.js.
     function esRespaldo() {
-      return ['csilva0725@gmail.com', 'sergiosamir330@gmail.com']
+      return ['correo@gmail.com']
         .hasAny([request.auth.token.email.lower()]);
     }
 
