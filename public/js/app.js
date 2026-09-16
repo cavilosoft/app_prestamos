@@ -82,6 +82,7 @@ async function init() {
   await cargarDashboard();
   await refrescarCapital();
   await refrescarListaCorreosAutorizados();
+  await refrescarSeccionPin();
 }
 
 function switchTab(tab) {
@@ -267,8 +268,15 @@ async function refrescarListaClientes() {
   }
 
   const resultado = await logic.listarClientesPaginado(filtrosClientes);
-  renderListaClientes(resultado);
+  const prestamosPorCliente = await logic.obtenerUltimosPrestamosPorClientes(resultado.items.map((c) => c.id));
+
+  // El arrastrar-y-soltar para ordenar solo tiene sentido cuando se ve UNA ruta concreta,
+  // sin texto de búsqueda de por medio, y con todos sus clientes en una sola página (si no,
+  // el orden visual no correspondería con el orden real que se guardaría).
+  const permiteOrdenar = !!(filtrosClientes.idRuta && !filtrosClientes.query && resultado.totalPaginas <= 1);
+  renderListaClientes(resultado, prestamosPorCliente, permiteOrdenar);
   renderPaginacion('cl_paginacion', resultado, cambiarPaginaClientes);
+  actualizarBarraAccionesRuta(resultado.totalPaginas > 1 && !!filtrosClientes.idRuta && !filtrosClientes.query);
 }
 
 function cambiarPaginaClientes(nuevaPagina) {
@@ -276,21 +284,130 @@ function cambiarPaginaClientes(nuevaPagina) {
   refrescarListaClientes();
 }
 
-function renderListaClientes(resultado) {
+/** Muestra/oculta y arma la barra con el botón "Ver ruta en el mapa" y el aviso de arrastre. */
+function actualizarBarraAccionesRuta(hayMasDeUnaPagina) {
+  const barra = document.getElementById('cl_rutaAcciones');
+  if (!barra) return;
+  const idRuta = filtrosClientes.idRuta;
+  if (!idRuta || filtrosClientes.query) { barra.style.display = 'none'; return; }
+  barra.style.display = 'flex';
+  const hint = document.getElementById('cl_ordenHint');
+  if (hint) {
+    hint.textContent = hayMasDeUnaPagina
+      ? 'Para ordenar arrastrando, elige "Clientes por página" suficiente para verlos todos juntos.'
+      : '🔀 Mantén presionado ⠿ y arrastra un cliente para ordenar la ruta según cómo lo visitas.';
+  }
+}
+
+function renderListaClientes(resultado, prestamosPorCliente, permiteOrdenar) {
+  prestamosPorCliente = prestamosPorCliente || {};
   const cont = document.getElementById('cl_listaContenido');
+  cont.classList.toggle('lista-ordenable', !!permiteOrdenar);
   if (!resultado.items.length) { cont.innerHTML = '<p class="muted">No se encontraron clientes con estos filtros.</p>'; return; }
   cont.innerHTML = resultado.items.map((c) => {
     const nombre = c.Nombres + ' ' + (c.Apellidos || '');
     const ubicacion = (c.Ciudad ? esc(c.Ciudad) : '') + (c.ID_Ruta ? (c.Ciudad ? ' · ' : '') + 'Ruta: ' + esc(nombreRuta(c.ID_Ruta)) : '');
-    return '<div class="resultado-item" onclick="mostrarDetalleCliente(\'' + c.id + '\')">' +
+    const p = prestamosPorCliente[c.id];
+    const infoPrestamo = p
+      ? '<div class="cl-prestamo">' +
+          '<span class="badge ' + p.Estado + '">' + p.Estado + '</span>' +
+          '<small>Prestado: ' + money(p.Monto_Prestado) + ' · Pagado: ' + money(p.Total_Abonado) + ' · A pagar: ' + money(p.Monto_A_Pagar) + '</small>' +
+          '<small>Fecha de pago: ' + esc(p.Fecha_Pago) + '</small>' +
+        '</div>'
+      : '';
+    const manija = permiteOrdenar
+      ? '<span class="ri-manija" title="Arrastra para ordenar" onpointerdown="iniciarArrastreCliente(event, \'' + c.id + '\')">⠿</span>'
+      : '';
+    return '<div class="resultado-item' + (permiteOrdenar ? ' arrastrable' : '') + '" data-id-cliente="' + c.id + '" onclick="mostrarDetalleCliente(\'' + c.id + '\')">' +
+      manija +
       '<div class="ri-avatar">' + iniciales(nombre) + '</div>' +
       '<div class="ri-body">' +
         '<div class="ri-top"><strong>' + esc(nombre) + '</strong></div>' +
         '<small>Cédula: ' + esc(c.Cedula) + (c.Celular ? ' · Cel: ' + esc(c.Celular) : '') + '</small>' +
         (ubicacion ? '<small>' + ubicacion + '</small>' : '') +
+        infoPrestamo +
       '</div>' +
       '<span class="ri-chevron">›</span></div>';
   }).join('');
+}
+
+// -------------------------------------------------------------------
+// ORDENAR CLIENTES DE UNA RUTA (arrastrar y soltar) + VER RUTA EN EL MAPA
+// -------------------------------------------------------------------
+// El orden se guarda en el campo Orden de cada cliente (ver logic.reordenarClientes) y solo
+// se puede editar así, mientras se ve una sola ruta filtrada, con todos sus clientes visibles
+// a la vez. Se implementa con Pointer Events (en vez de la API nativa de "drag and drop" de
+// HTML5) porque esa API nativa no funciona bien con el dedo en celulares, que es donde más se
+// va a usar esto en la práctica.
+
+let _arrastre = null;
+
+function iniciarArrastreCliente(ev, idCliente) {
+  ev.preventDefault();
+  ev.stopPropagation();
+  const cont = document.getElementById('cl_listaContenido');
+  const fila = cont.querySelector('.resultado-item[data-id-cliente="' + idCliente + '"]');
+  if (!fila) return;
+  _arrastre = { cont, fila };
+  fila.classList.add('arrastrando');
+  try { ev.target.setPointerCapture(ev.pointerId); } catch (e) { /* no crítico */ }
+  document.addEventListener('pointermove', onMoverArrastreCliente);
+  document.addEventListener('pointerup', onSoltarArrastreCliente);
+  document.addEventListener('pointercancel', onSoltarArrastreCliente);
+}
+
+function onMoverArrastreCliente(ev) {
+  if (!_arrastre) return;
+  ev.preventDefault();
+  const { cont, fila } = _arrastre;
+  const y = ev.clientY;
+  const filas = Array.from(cont.querySelectorAll('.resultado-item')).filter((f) => f !== fila);
+  for (const otra of filas) {
+    const rect = otra.getBoundingClientRect();
+    const medio = rect.top + rect.height / 2;
+    if (y < medio) {
+      if (otra.previousElementSibling !== fila) cont.insertBefore(fila, otra);
+      return;
+    }
+  }
+  if (cont.lastElementChild !== fila) cont.appendChild(fila);
+}
+
+async function onSoltarArrastreCliente() {
+  if (!_arrastre) return;
+  const { cont, fila } = _arrastre;
+  fila.classList.remove('arrastrando');
+  document.removeEventListener('pointermove', onMoverArrastreCliente);
+  document.removeEventListener('pointerup', onSoltarArrastreCliente);
+  document.removeEventListener('pointercancel', onSoltarArrastreCliente);
+  _arrastre = null;
+
+  const idsEnOrden = Array.from(cont.querySelectorAll('.resultado-item')).map((f) => f.dataset.idCliente);
+  try {
+    await logic.reordenarClientes(idsEnOrden);
+    intentarSincronizar();
+  } catch (e) {
+    console.error('Error guardando el nuevo orden de la ruta:', e);
+  }
+}
+
+/** Abre Google Maps con la ubicación de todos los clientes de la ruta filtrada actualmente
+ *  (en el mismo orden en que se muestran en la lista, respetando el orden manual si existe). */
+async function verRutaEnMapa() {
+  const idRuta = filtrosClientes.idRuta;
+  if (!idRuta) return;
+  const resultado = await logic.listarClientesPaginado({ idRuta: idRuta, tamano: 100000, pagina: 1 });
+  const conUbicacion = resultado.items.filter((c) => c.Geolocalizacion && String(c.Geolocalizacion).trim());
+  if (!conUbicacion.length) {
+    alert('Ninguno de los clientes de esta ruta tiene guardada su ubicación todavía.');
+    return;
+  }
+  const MAX_PUNTOS = 23; // límite práctico de una ruta de direcciones de Google Maps armada por URL
+  const puntos = conUbicacion.slice(0, MAX_PUNTOS).map((c) => encodeURIComponent(String(c.Geolocalizacion).trim()));
+  window.open('https://www.google.com/maps/dir/' + puntos.join('/'), '_blank', 'noopener');
+  if (conUbicacion.length > MAX_PUNTOS) {
+    alert('Esta ruta tiene ' + conUbicacion.length + ' clientes con ubicación guardada; el mapa solo puede mostrar los primeros ' + MAX_PUNTOS + ' a la vez.');
+  }
 }
 
 // -------------------------------------------------------------------
@@ -1658,10 +1775,140 @@ async function onClicIniciarSesionGoogle() {
 
 async function mostrarApp(email) {
   document.getElementById('lockScreen').style.display = 'none';
-  document.getElementById('appShell').style.display = '';
   window._correoSesionActual = email;
   await _resolverRestriccionCobrador(email);
+
+  if (await appLockActivo()) {
+    mostrarPantallaPin();
+  } else {
+    await _continuarMostrarApp();
+  }
+}
+
+async function _continuarMostrarApp() {
+  document.getElementById('pinScreen').style.display = 'none';
+  document.getElementById('appShell').style.display = '';
   init();
+}
+
+// -------------------------------------------------------------------
+// PIN DE ACCESO (bloqueo adicional, local a este dispositivo)
+// -------------------------------------------------------------------
+// Capa de seguridad extra, aparte del inicio de sesión con Google: si está activada, cada
+// vez que se abre la app (ya con la sesión de Google válida) se pide un PIN de 4 dígitos
+// antes de mostrar cualquier dato. Pensada para el caso de que alguien más tenga acceso
+// físico al celular/portátil con la sesión de Google ya iniciada.
+//
+// Dónde queda guardado: en IndexedDB de ESTE dispositivo únicamente (clave "appLock" en el
+// almacén "kv"), NUNCA en Firestore — a diferencia de "config" (parámetros del sistema),
+// esta clave no se sincroniza (ver firebase-sync.js: solo sincroniza idb.COLECCIONES y la
+// clave "config"). Por eso: (a) activarlo/desactivarlo o cambiarlo en un dispositivo no
+// afecta a los demás — cada uno tiene su propio PIN independiente; (b) no hay ningún riesgo
+// de que esto interfiera con la sincronización de los datos del negocio; (c) si se olvida el
+// PIN, la única forma de recuperarlo es borrar los datos del sitio en ese navegador (eso NO
+// borra la información del negocio, que vive en Firestore — al volver a entrar se sincroniza
+// de nuevo — pero si en ese momento había algo sin sincronizar aún, sí se perdería, así que
+// conviene sincronizar antes de tocar el PIN si hay dudas).
+// No hay límite de intentos: se puede volver a intentar las veces que haga falta.
+
+async function _hashPin(pin) {
+  const datos = new TextEncoder().encode('prestamos-pwa-pin-v1:' + pin);
+  const buffer = await crypto.subtle.digest('SHA-256', datos);
+  return Array.from(new Uint8Array(buffer)).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function obtenerAppLock() {
+  return idb.kvGet('appLock', { activo: false, pinHash: null });
+}
+
+async function appLockActivo() {
+  const al = await obtenerAppLock();
+  return !!(al && al.activo && al.pinHash);
+}
+
+function mostrarPantallaPin() {
+  document.getElementById('appShell').style.display = 'none';
+  const pantalla = document.getElementById('pinScreen');
+  pantalla.style.display = 'flex';
+  const input = document.getElementById('pinScreenInput');
+  input.value = '';
+  const elMsg = document.getElementById('pinScreenMsg');
+  elMsg.textContent = '';
+  elMsg.className = '';
+  setTimeout(() => input.focus(), 50);
+}
+
+async function onSubmitPinScreen(ev) {
+  if (ev) ev.preventDefault();
+  const input = document.getElementById('pinScreenInput');
+  const pin = input.value.trim();
+  const elMsg = document.getElementById('pinScreenMsg');
+  if (!/^\d{4}$/.test(pin)) {
+    elMsg.textContent = 'Ingresa los 4 dígitos del PIN.';
+    elMsg.className = 'msg error';
+    return false;
+  }
+  const al = await obtenerAppLock();
+  const hashIngresado = await _hashPin(pin);
+  if (hashIngresado !== al.pinHash) {
+    elMsg.textContent = 'PIN incorrecto — intenta de nuevo.';
+    elMsg.className = 'msg error';
+    input.value = '';
+    input.focus();
+    return false;
+  }
+  await _continuarMostrarApp();
+  return false;
+}
+
+// ---- Configuración → activar/desactivar/cambiar el PIN ----
+
+async function refrescarSeccionPin() {
+  const al = await obtenerAppLock();
+  const chk = document.getElementById('pin_activo');
+  if (!chk) return;
+  chk.checked = !!al.activo;
+  document.getElementById('pin_cambiarWrap').style.display = al.activo ? '' : 'none';
+}
+
+async function onToggleAppLock(chk) {
+  if (chk.checked) {
+    chk.checked = false; // no se marca hasta confirmar el PIN en el modal
+    mostrarModalDefinirPin(true);
+  } else {
+    await idb.kvSet('appLock', { activo: false, pinHash: null, updatedAt: logic.nowISO() });
+    await refrescarSeccionPin();
+    mostrarMsg('configMsg', 'PIN de acceso desactivado en este dispositivo.', 'ok');
+  }
+}
+
+function mostrarModalCambiarPin() {
+  mostrarModalDefinirPin(false);
+}
+
+function mostrarModalDefinirPin(esActivacion) {
+  const cuerpo =
+    '<p class="muted">' + (esActivacion
+      ? 'Define el PIN de 4 dígitos que se pedirá cada vez que se abra la app en este dispositivo (después de iniciar sesión con Google).'
+      : 'Define el nuevo PIN de 4 dígitos para este dispositivo.') + '</p>' +
+    '<div class="row">' +
+      '<div class="field"><label>PIN (4 dígitos) *</label><input type="password" inputmode="numeric" maxlength="4" id="pin_nuevo" autocomplete="off"></div>' +
+      '<div class="field"><label>Confirmar PIN *</label><input type="password" inputmode="numeric" maxlength="4" id="pin_confirmar" autocomplete="off"></div>' +
+    '</div>';
+  abrirModal(esActivacion ? 'Activar PIN de acceso' : 'Cambiar PIN de acceso', cuerpo, () => guardarNuevoPin(esActivacion), 'Guardar');
+}
+
+async function guardarNuevoPin(esActivacion) {
+  const pin = document.getElementById('pin_nuevo').value.trim();
+  const confirmacion = document.getElementById('pin_confirmar').value.trim();
+  if (!/^\d{4}$/.test(pin)) { mostrarMsg('modalMsg', '⚠️ El PIN debe tener exactamente 4 dígitos.', 'error'); return; }
+  if (pin !== confirmacion) { mostrarMsg('modalMsg', '⚠️ Los dos PIN no coinciden.', 'error'); return; }
+
+  const pinHash = await _hashPin(pin);
+  await idb.kvSet('appLock', { activo: true, pinHash, updatedAt: logic.nowISO() });
+  cerrarModal();
+  await refrescarSeccionPin();
+  mostrarMsg('configMsg', esActivacion ? 'PIN de acceso activado en este dispositivo.' : 'PIN actualizado en este dispositivo.', 'ok');
 }
 
 /** Decide si la cuenta que acaba de entrar ve toda la app (el dueño) o solo los clientes

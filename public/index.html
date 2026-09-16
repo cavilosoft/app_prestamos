@@ -11,7 +11,6 @@
   <link rel="apple-touch-icon" href="icons/icon-192.png">
   <link rel="stylesheet" href="styles.css">
 </head>
-
 <body>
 
 <div id="lockScreen" class="lock-screen" style="display:flex;">
@@ -21,6 +20,20 @@
     <p class="muted">Inicia sesión con la cuenta de Google autorizada para entrar a la app.</p>
     <button class="btn" id="btnIniciarSesionGoogle" onclick="onClicIniciarSesionGoogle()" style="display:none;">Iniciar sesión con Google</button>
     <div id="lockMsg" class="msg info">Verificando sesión…</div>
+  </div>
+</div>
+
+<!-- PIN de acceso adicional (local a este dispositivo, ver Configuración → 🔒 PIN de acceso) -->
+<div id="pinScreen" class="lock-screen" style="display:none;">
+  <div class="lock-card">
+    <div class="lock-icono">🔒</div>
+    <h1>Ingresa tu PIN</h1>
+    <p class="muted">Este dispositivo tiene activado un PIN de acceso adicional.</p>
+    <form onsubmit="return onSubmitPinScreen(event)">
+      <input type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4" id="pinScreenInput" class="pin-input" placeholder="••••" autocomplete="off">
+      <button class="btn" type="submit">Entrar</button>
+    </form>
+    <div id="pinScreenMsg" style="margin-top:10px;"></div>
   </div>
 </div>
 
@@ -69,6 +82,10 @@
             </select>
           </div>
         </div>
+      </div>
+      <div id="cl_rutaAcciones" class="ruta-acciones" style="display:none;">
+        <small id="cl_ordenHint" class="muted"></small>
+        <button type="button" class="btn chico secundario" onclick="verRutaEnMapa()">📍 Ver ruta en el mapa</button>
       </div>
       <div id="cl_listaContenido"></div>
       <div id="cl_paginacion" class="paginacion"></div>
@@ -370,6 +387,21 @@
     <div class="card" id="capitalCard3">
       <h2>Historial de inyecciones de capital</h2>
       <div id="cap_historial"></div>
+    </div>
+
+    <div class="card">
+      <h2>🔒 PIN de acceso (este dispositivo)</h2>
+      <p class="muted">Capa extra de seguridad: si se activa, cada vez que se abra la app en <strong>este
+        dispositivo</strong> (después de iniciar sesión con Google) se pedirá un PIN de 4 dígitos. Se
+        guarda solo en este dispositivo — no se sincroniza con Firebase ni con otros dispositivos, así
+        que cada uno tiene su propio PIN independiente. No hay límite de intentos.</p>
+      <label style="display:flex; align-items:center; gap:8px; font-size:14px; cursor:pointer;">
+        <input type="checkbox" id="pin_activo" onchange="onToggleAppLock(this)" style="width:auto;">
+        Activar PIN de acceso en este dispositivo
+      </label>
+      <div id="pin_cambiarWrap" style="display:none; margin-top:10px;">
+        <button type="button" class="btn chico secundario" onclick="mostrarModalCambiarPin()">Cambiar PIN</button>
+      </div>
     </div>
 
     <div class="card">

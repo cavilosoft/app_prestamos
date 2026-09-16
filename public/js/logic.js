@@ -190,6 +190,20 @@ async function listarClientesPaginado(opciones) {
     items = items.filter((c) => idsRutasCobrador.has(c.ID_Ruta));
   }
 
+  // Si se filtró por una ruta específica (y no hay texto de búsqueda), se respeta el orden
+  // manual que se haya definido arrastrando y soltando (campo Orden) — así la lista queda en
+  // el mismo orden en que se visita a los clientes. Los clientes sin Orden asignado (por
+  // ejemplo, los que ya existían antes de esta función) se muestran al final, en orden
+  // alfabético entre ellos — igual que se veían antes de que existiera este campo.
+  if (opciones.idRuta && !opciones.query) {
+    items = items.slice().sort((a, b) => {
+      const oa = Number.isFinite(a.Orden) ? a.Orden : Infinity;
+      const ob = Number.isFinite(b.Orden) ? b.Orden : Infinity;
+      if (oa !== ob) return oa - ob;
+      return String(a.Nombres).localeCompare(String(b.Nombres));
+    });
+  }
+
   const total = items.length;
   const tamano = Number(opciones.tamano) || 20;
   const pagina = Math.max(1, Number(opciones.pagina) || 1);
@@ -208,6 +222,22 @@ async function listarCiudadesUsadas() {
 
 async function obtenerCliente(id) {
   return idb.obtenerPorId('clientes', id);
+}
+
+/**
+ * Guarda el nuevo orden manual (arrastrar y soltar) de los clientes de una ruta.
+ * idsEnOrden: ids de cliente en el orden deseado — se les asigna Orden = 0,1,2… Solo toca
+ * el campo Orden (y updatedAt) de cada cliente; no altera nada más de su registro. Los
+ * clientes que ya estaban en su posición correcta no se vuelven a escribir.
+ */
+async function reordenarClientes(idsEnOrden) {
+  for (let i = 0; i < idsEnOrden.length; i++) {
+    const cliente = await obtenerCliente(idsEnOrden[i]);
+    if (!cliente || cliente.Orden === i) continue;
+    cliente.Orden = i;
+    cliente.updatedAt = nowISO();
+    await idb.guardar('clientes', cliente);
+  }
 }
 
 async function crearCliente(datos) {
@@ -575,6 +605,49 @@ async function obtenerHistorialCliente(idCliente) {
   if (!cliente) throw new Error('Cliente no encontrado.');
   const prestamos = await obtenerPrestamosPorCliente(idCliente);
   return { cliente, prestamos };
+}
+
+/**
+ * Para cada cliente en idsClientes, devuelve su préstamo más reciente (preferiendo uno que
+ * siga Activo o en Mora; si no tiene ninguno así, el más reciente de cualquier estado), ya
+ * enriquecido con Estado/Total_Abonado/Saldo_Pendiente. Pensado para la lista de clientes,
+ * donde se necesita esta información de varios clientes a la vez: lee las colecciones de
+ * préstamos y abonos UNA sola vez (en vez de una vez por cada cliente de la página).
+ * Devuelve un objeto { idCliente: prestamoEnriquecido }; un cliente sin préstamos no aparece.
+ */
+async function obtenerUltimosPrestamosPorClientes(idsClientes) {
+  const idsSet = new Set((idsClientes || []).map(String));
+  if (!idsSet.size) return {};
+
+  const todosPrestamos = (await idb.obtenerTodos('prestamos')).filter((p) => !p.deleted && idsSet.has(String(p.ID_Cliente)));
+  const todosAbonos = await idb.obtenerTodos('abonos');
+
+  const porClienteTodos = {}; // el más reciente de cualquier estado
+  const porClienteActivos = {}; // el más reciente entre Activo/Mora
+  todosPrestamos.forEach((p) => {
+    const key = String(p.ID_Cliente);
+    if (!porClienteTodos[key] || String(p.Fecha_Prestamo) > String(porClienteTodos[key].Fecha_Prestamo)) {
+      porClienteTodos[key] = p;
+    }
+  });
+
+  const resultado = {};
+  Object.keys(porClienteTodos).forEach((idCliente) => {
+    const propios = todosPrestamos.filter((p) => String(p.ID_Cliente) === idCliente);
+    const abonosPorPrestamo = (idPrestamo) => todosAbonos
+      .filter((a) => !a.deleted && String(a.ID_Prestamo) === String(idPrestamo))
+      .sort((a, b) => String(a.Fecha_Abono).localeCompare(String(b.Fecha_Abono)));
+
+    // Se enriquece cada préstamo del cliente solo para poder filtrar por Estado; es barato
+    // porque ya tenemos todo en memoria (no vuelve a leer IndexedDB).
+    const enriquecidos = propios.map((p) => enriquecerPrestamo(p, abonosPorPrestamo(p.id)));
+    enriquecidos.sort((a, b) => String(b.Fecha_Prestamo).localeCompare(String(a.Fecha_Prestamo)));
+
+    const activo = enriquecidos.find((p) => p.Estado === ESTADOS.ACTIVO || p.Estado === ESTADOS.MORA);
+    resultado[idCliente] = activo || enriquecidos[0];
+  });
+
+  return resultado;
 }
 
 // -------------------------------------------------------------------------
@@ -956,11 +1029,12 @@ window.logic = {
   getConfig, guardarConfig,
   CORREOS_RESPALDO, listarCorreosAutorizados, agregarCorreoAutorizado, quitarCorreoAutorizado, estaCorreoAutorizado,
   listarClientes, buscarClientes, listarClientesPaginado, listarCiudadesUsadas,
-  obtenerCliente, crearCliente, actualizarCliente,
+  obtenerCliente, crearCliente, actualizarCliente, reordenarClientes,
   listarRutas, obtenerRuta, crearRuta, actualizarRuta, contarClientesPorRuta,
   listarCobradores, obtenerCobrador, obtenerCobradorPorCorreo, crearCobrador, actualizarCobrador, listarRutasPorCobrador,
   calcularSugerido, crearPrestamo, actualizarPrestamo, actualizarEstadoManual, obtenerPrestamo,
   obtenerPrestamosPorCliente, listarPrestamosPorClientePaginado, obtenerHistorialCliente, obtenerAbonosPorPrestamo,
+  obtenerUltimosPrestamosPorClientes,
   registrarAbono, marcarCuotaPagada, revertirCuotaPagada, retanquearPrestamo, obtenerDashboard,
   listarCapital, registrarCapital, actualizarCapital, eliminarCapital, listarInversionistasUsados, obtenerResumenCapital
 };

@@ -3,7 +3,7 @@
  * sin internet (los datos en sí viven en IndexedDB, no en este caché).
  * Sube CACHE_NAME cada vez que publiques una actualización para forzar la renovación.
  */
-const CACHE_NAME = 'prestamos-app-v26';
+const CACHE_NAME = 'prestamos-app-v27';
 const ARCHIVOS_APP_SHELL = [
   './',
   './index.html',
