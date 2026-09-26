@@ -1734,6 +1734,28 @@ async function onClicSincronizar() {
   }
 }
 
+/** Descarga un archivo .json con todos los datos guardados en este dispositivo (respaldo
+ *  de solo lectura), para poder volver atrás si algo sale mal tras una actualización. */
+async function descargarRespaldo() {
+  try {
+    const respaldo = await logic.exportarRespaldoCompleto();
+    const json = JSON.stringify(respaldo, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const fecha = logic.hoyISO();
+    a.href = url;
+    a.download = 'respaldo-prestamos-' + fecha + '.json';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    mostrarMsg('respaldoMsg', '✅ Copia de seguridad descargada.', 'ok');
+  } catch (e) {
+    manejarError(e, 'respaldoMsg');
+  }
+}
+
 async function actualizarEstadoConexionDrive() {
   const el = document.getElementById('cap_estadoDrive');
   if (!el) return;

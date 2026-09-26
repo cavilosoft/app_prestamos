@@ -1090,8 +1090,28 @@ async function obtenerDashboard(filtro) {
   };
 }
 
+/**
+ * Arma un respaldo completo de TODO lo guardado en este dispositivo: cada colección tal
+ * cual está en IndexedDB (incluidos los registros borrados lógicamente) más la
+ * configuración. Es de solo lectura — no modifica nada — pensado para descargarse como
+ * archivo antes de aplicar un cambio importante, por si hay que volver atrás.
+ */
+async function exportarRespaldoCompleto() {
+  const datos = {};
+  for (const nombre of idb.COLECCIONES) {
+    datos[nombre] = await idb.obtenerTodos(nombre);
+  }
+  datos.config = await getConfig();
+  return {
+    _respaldo: 'app-prestamos',
+    generadoEn: nowISO(),
+    datos
+  };
+}
+
 window.logic = {
   ESTADOS, TIPOS_CAPITAL, nowISO, hoyISO, round2, generarId, fusionarColeccion, fusionarConfig,
+  exportarRespaldoCompleto,
   getConfig, guardarConfig,
   CORREOS_RESPALDO, listarCorreosAutorizados, agregarCorreoAutorizado, quitarCorreoAutorizado, estaCorreoAutorizado,
   pinAccesoActivo, activarPinAcceso, desactivarPinAcceso, verificarPinAcceso,
