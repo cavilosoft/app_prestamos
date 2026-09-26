@@ -1270,18 +1270,43 @@ async function refrescarRutas() {
   cont.innerHTML = rutasCache.map((r) => {
     const opciones = '<option value="">Sin cobrador asignado</option>' +
       cobradoresCache.map((c) => '<option value="' + c.id + '"' + (c.id === r.ID_Cobrador ? ' selected' : '') + '>' + esc(c.Nombre) + '</option>').join('');
+    const numClientes = conteo[r.id] || 0;
+    const btnEliminar = numClientes
+      ? '<button type="button" class="btn chico secundario" disabled title="Esta ruta tiene ' + numClientes + ' cliente(s) asignado(s); no se puede eliminar mientras tenga alguno.">🗑️ Eliminar</button>'
+      : '<button type="button" class="btn chico secundario" onclick="confirmarEliminarRuta(\'' + r.id + '\')">🗑️ Eliminar</button>';
     return '<div class="resultado-item estatico">' +
       '<div class="ri-avatar">🧭</div>' +
       '<div class="ri-body">' +
-        '<div class="ri-top"><strong>' + esc(r.Nombre) + '</strong><span class="ri-count">' + (conteo[r.id] || 0) + ' cliente(s)</span></div>' +
+        '<div class="ri-top"><strong>' + esc(r.Nombre) + '</strong><span class="ri-count">' + numClientes + ' cliente(s)</span></div>' +
         (r.Nota ? '<small>' + esc(r.Nota) + '</small>' : '') +
         '<div class="ri-acciones">' +
           '<select id="rt_cobradorEdit_' + r.id + '">' + opciones + '</select>' +
           '<button type="button" class="btn chico secundario" onclick="guardarCobradorDeRuta(\'' + r.id + '\')">Guardar</button>' +
           '<button type="button" class="btn chico secundario" onclick="mostrarModalEditarRuta(\'' + r.id + '\')">✏️ Editar</button>' +
+          btnEliminar +
         '</div>' +
       '</div></div>';
   }).join('');
+}
+
+function confirmarEliminarRuta(idRuta) {
+  const r = rutasCache.find((x) => x.id === idRuta);
+  if (!r) return;
+  abrirModal(
+    'Eliminar ruta',
+    '<p>¿Seguro que quieres eliminar la ruta <strong>' + esc(r.Nombre) + '</strong>? Esta acción no se puede deshacer.</p>',
+    () => eliminarRutaConfirmada(idRuta),
+    'Eliminar'
+  );
+}
+
+async function eliminarRutaConfirmada(idRuta) {
+  try {
+    await logic.eliminarRuta(idRuta);
+    cerrarModal();
+    await refrescarRutas();
+    intentarSincronizar();
+  } catch (e) { manejarError(e, 'modalMsg'); }
 }
 
 async function guardarCobradorDeRuta(idRuta) {

@@ -380,6 +380,25 @@ async function contarClientesPorRuta() {
   return conteo;
 }
 
+/**
+ * Elimina (borrado lógico) una ruta, solo si no tiene ningún cliente asignado.
+ * La validación se hace aquí (no solo en la pantalla) para que quede protegida
+ * sin importar desde dónde se llame.
+ */
+async function eliminarRuta(id) {
+  const ruta = await obtenerRuta(id);
+  if (!ruta) throw new Error('Ruta no encontrada.');
+  const clientes = await listarClientes();
+  const tieneClientes = clientes.some((c) => c.ID_Ruta === id);
+  if (tieneClientes) {
+    throw new Error('Esta ruta tiene clientes asignados: no se puede eliminar. Cambia primero la ruta de esos clientes (o elimínalos) y vuelve a intentarlo.');
+  }
+  ruta.deleted = true;
+  ruta.updatedAt = nowISO();
+  await idb.guardar('rutas', ruta);
+  return true;
+}
+
 // -------------------------------------------------------------------------
 // COBRADORES
 // -------------------------------------------------------------------------
@@ -1078,7 +1097,7 @@ window.logic = {
   pinAccesoActivo, activarPinAcceso, desactivarPinAcceso, verificarPinAcceso,
   listarClientes, buscarClientes, listarClientesPaginado, listarCiudadesUsadas,
   obtenerCliente, crearCliente, actualizarCliente, reordenarClientes,
-  listarRutas, obtenerRuta, crearRuta, actualizarRuta, contarClientesPorRuta,
+  listarRutas, obtenerRuta, crearRuta, actualizarRuta, contarClientesPorRuta, eliminarRuta,
   listarCobradores, obtenerCobrador, obtenerCobradorPorCorreo, crearCobrador, actualizarCobrador, listarRutasPorCobrador,
   calcularSugerido, crearPrestamo, actualizarPrestamo, actualizarEstadoManual, obtenerPrestamo,
   obtenerPrestamosPorCliente, listarPrestamosPorClientePaginado, obtenerHistorialCliente, obtenerAbonosPorPrestamo,
