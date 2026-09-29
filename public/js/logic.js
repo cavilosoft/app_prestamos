@@ -335,6 +335,33 @@ async function actualizarCliente(id, datos) {
   return actual;
 }
 
+/**
+ * Elimina (borrado lógico) un cliente Y TODOS sus préstamos (y, en cascada, los abonos de
+ * cada uno de esos préstamos) — no tiene reverso. Pide el PIN de acceso como confirmación
+ * extra, igual que eliminarPrestamo, precisamente porque es una acción destructiva y en
+ * cascada. Requiere que el PIN esté activado (Configuración → 🔒 PIN de acceso): si nunca
+ * se configuró, no hay con qué verificar, así que se pide activarlo primero.
+ */
+async function eliminarCliente(id, pin) {
+  if (!(await pinAccesoActivo())) {
+    throw new Error('Para eliminar un cliente primero debes activar un PIN de acceso (Configuración → 🔒 PIN de acceso).');
+  }
+  if (!(await verificarPinAcceso(pin))) throw new Error('PIN incorrecto.');
+
+  const cliente = await obtenerCliente(id);
+  if (!cliente) throw new Error('Cliente no encontrado.');
+
+  const prestamos = (await idb.obtenerTodos('prestamos')).filter((p) => !p.deleted && String(p.ID_Cliente) === String(id));
+  for (const p of prestamos) {
+    await _eliminarPrestamoCascada(p.id);
+  }
+
+  cliente.deleted = true;
+  cliente.updatedAt = nowISO();
+  await idb.guardar('clientes', cliente);
+  return true;
+}
+
 // -------------------------------------------------------------------------
 // RUTAS
 // -------------------------------------------------------------------------
@@ -469,6 +496,26 @@ async function actualizarCobrador(id, datos) {
   return actual;
 }
 
+/**
+ * Elimina (borrado lógico) un cobrador — no pide PIN. NO elimina clientes ni rutas: las
+ * rutas que tenía asignadas quedan "sin cobrador asignado" (se les quita la referencia,
+ * pero la ruta y sus clientes siguen intactos).
+ */
+async function eliminarCobrador(id) {
+  const cobrador = await obtenerCobrador(id);
+  if (!cobrador) throw new Error('Cobrador no encontrado.');
+
+  const rutas = await listarRutas();
+  for (const r of rutas) {
+    if (r.ID_Cobrador === id) await actualizarRuta(r.id, { ID_Cobrador: null });
+  }
+
+  cobrador.deleted = true;
+  cobrador.updatedAt = nowISO();
+  await idb.guardar('cobradores', cobrador);
+  return true;
+}
+
 /** Rutas asignadas a un cobrador (un cobrador puede tener varias). */
 async function listarRutasPorCobrador(idCobrador) {
   const rutas = await listarRutas();
@@ -589,6 +636,40 @@ async function actualizarEstadoManual(idPrestamo, nuevoEstado) {
   prestamo.updatedAt = nowISO();
   await idb.guardar('prestamos', prestamo);
   return obtenerPrestamo(idPrestamo);
+}
+
+/** Borrado lógico en cascada de un préstamo: primero todos sus abonos, luego el préstamo
+ *  mismo. Función interna compartida entre eliminarPrestamo() y eliminarCliente(). */
+async function _eliminarPrestamoCascada(idPrestamo) {
+  const abonos = (await idb.obtenerTodos('abonos')).filter((a) => !a.deleted && String(a.ID_Prestamo) === String(idPrestamo));
+  for (const a of abonos) {
+    a.deleted = true;
+    a.updatedAt = nowISO();
+    await idb.guardar('abonos', a);
+  }
+  const prestamo = await idb.obtenerPorId('prestamos', idPrestamo);
+  if (prestamo) {
+    prestamo.deleted = true;
+    prestamo.updatedAt = nowISO();
+    await idb.guardar('prestamos', prestamo);
+  }
+}
+
+/**
+ * Elimina (borrado lógico) un préstamo Y TODOS sus abonos — no tiene reverso. Pide el PIN
+ * de acceso como confirmación extra (mismo requisito que eliminarCliente).
+ */
+async function eliminarPrestamo(idPrestamo, pin) {
+  if (!(await pinAccesoActivo())) {
+    throw new Error('Para eliminar un préstamo primero debes activar un PIN de acceso (Configuración → 🔒 PIN de acceso).');
+  }
+  if (!(await verificarPinAcceso(pin))) throw new Error('PIN incorrecto.');
+
+  const prestamo = await idb.obtenerPorId('prestamos', idPrestamo);
+  if (!prestamo) throw new Error('Préstamo no encontrado.');
+
+  await _eliminarPrestamoCascada(idPrestamo);
+  return true;
 }
 
 /** Determina el estado real de un préstamo. Nunca se guarda: siempre se calcula al leer. */
@@ -834,6 +915,34 @@ async function revertirCuotaPagada(idPrestamo, numeroCuota) {
   prestamo.updatedAt = nowISO();
   await idb.guardar('prestamos', prestamo);
   return obtenerPrestamo(idPrestamo);
+}
+
+/**
+ * Elimina (borrado lógico) un abono individual — no pide PIN (es una acción más frecuente
+ * y menos destructiva que borrar todo un préstamo o cliente). Si ese abono venía de una
+ * cuota marcada como pagada (marcarCuotaPagada), se destraba esa cuota para que vuelva a
+ * quedar pendiente y no quede huérfana apuntando a un abono borrado.
+ */
+async function eliminarAbono(id) {
+  const abono = await idb.obtenerPorId('abonos', id);
+  if (!abono) throw new Error('Abono no encontrado.');
+
+  abono.deleted = true;
+  abono.updatedAt = nowISO();
+  await idb.guardar('abonos', abono);
+
+  const prestamo = await idb.obtenerPorId('prestamos', abono.ID_Prestamo);
+  if (prestamo && Array.isArray(prestamo.Plan_Pagos)) {
+    const cuota = prestamo.Plan_Pagos.find((c) => c.abonoId === id);
+    if (cuota) {
+      prestamo.Plan_Pagos = prestamo.Plan_Pagos.map((c) =>
+        c.numero === cuota.numero ? Object.assign({}, c, { pagada: false, fechaPagoReal: null, abonoId: null }) : c
+      );
+      prestamo.updatedAt = nowISO();
+      await idb.guardar('prestamos', prestamo);
+    }
+  }
+  return true;
 }
 
 // -------------------------------------------------------------------------
@@ -1116,12 +1225,12 @@ window.logic = {
   CORREOS_RESPALDO, listarCorreosAutorizados, agregarCorreoAutorizado, quitarCorreoAutorizado, estaCorreoAutorizado,
   pinAccesoActivo, activarPinAcceso, desactivarPinAcceso, verificarPinAcceso,
   listarClientes, buscarClientes, listarClientesPaginado, listarCiudadesUsadas,
-  obtenerCliente, crearCliente, actualizarCliente, reordenarClientes,
+  obtenerCliente, crearCliente, actualizarCliente, reordenarClientes, eliminarCliente,
   listarRutas, obtenerRuta, crearRuta, actualizarRuta, contarClientesPorRuta, eliminarRuta,
-  listarCobradores, obtenerCobrador, obtenerCobradorPorCorreo, crearCobrador, actualizarCobrador, listarRutasPorCobrador,
-  calcularSugerido, crearPrestamo, actualizarPrestamo, actualizarEstadoManual, obtenerPrestamo,
+  listarCobradores, obtenerCobrador, obtenerCobradorPorCorreo, crearCobrador, actualizarCobrador, listarRutasPorCobrador, eliminarCobrador,
+  calcularSugerido, crearPrestamo, actualizarPrestamo, actualizarEstadoManual, obtenerPrestamo, eliminarPrestamo,
   obtenerPrestamosPorCliente, listarPrestamosPorClientePaginado, obtenerHistorialCliente, obtenerAbonosPorPrestamo,
   obtenerUltimosPrestamosPorClientes,
-  registrarAbono, marcarCuotaPagada, revertirCuotaPagada, retanquearPrestamo, obtenerDashboard,
+  registrarAbono, marcarCuotaPagada, revertirCuotaPagada, eliminarAbono, retanquearPrestamo, obtenerDashboard,
   listarCapital, registrarCapital, actualizarCapital, eliminarCapital, listarInversionistasUsados, obtenerResumenCapital
 };

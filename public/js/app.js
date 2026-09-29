@@ -520,7 +520,10 @@ function renderInfoCliente(c) {
   document.getElementById('dc_infoCliente').innerHTML =
     '<div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px;">' +
       '<h2 style="margin:0;">' + esc(c.Nombres + ' ' + (c.Apellidos || '')) + '</h2>' +
-      '<button type="button" class="btn chico secundario" onclick="mostrarModalEditarCliente()">✏️ Editar</button>' +
+      '<span style="display:flex; gap:8px;">' +
+        '<button type="button" class="btn chico secundario" onclick="mostrarModalEditarCliente()">✏️ Editar</button>' +
+        '<button type="button" class="btn chico secundario" onclick="confirmarEliminarCliente()">🗑️ Eliminar</button>' +
+      '</span>' +
     '</div>' +
     '<div class="datos-grid">' +
       dato('Cédula', c.Cedula) + dato('Celular', c.Celular) + dato('Ciudad', c.Ciudad) +
@@ -591,6 +594,42 @@ async function guardarEdicionCliente() {
     renderInfoCliente(clienteActual);
     await refrescarListaClientes();
     intentarSincronizar();
+  } catch (e) { manejarError(e, 'modalMsg'); }
+}
+
+/**
+ * Pide el PIN de acceso y una confirmación explícita antes de eliminar un cliente, porque
+ * es una acción en cascada (borra también todos sus préstamos y abonos) y no tiene
+ * reverso. Si todavía no hay un PIN configurado, en vez del formulario de PIN se muestra
+ * un aviso para ir a activarlo primero.
+ */
+async function confirmarEliminarCliente() {
+  if (!clienteActual) return;
+  const nombre = (clienteActual.Nombres + ' ' + (clienteActual.Apellidos || '')).trim();
+
+  if (!(await logic.pinAccesoActivo())) {
+    abrirModal(
+      'Eliminar cliente',
+      '<p>Para eliminar un cliente primero debes activar un PIN de acceso.</p><p class="muted">Ve a Configuración → 🔒 PIN de acceso.</p>',
+      () => { cerrarModal(); switchTab('configuracion'); },
+      'Ir a Configuración'
+    );
+    return;
+  }
+
+  const cuerpo =
+    '<p><strong>⚠️ Esta acción no se puede deshacer.</strong> Se eliminará el cliente <strong>' + esc(nombre) + '</strong> y TODOS sus préstamos, junto con los abonos de cada uno.</p>' +
+    '<div class="field"><label>Ingresa tu PIN de acceso para confirmar *</label><input type="password" inputmode="numeric" maxlength="4" id="delcli_pin" autocomplete="off"></div>';
+  abrirModal('Eliminar cliente', cuerpo, () => eliminarClienteConfirmado(clienteActualId), 'Eliminar');
+}
+
+async function eliminarClienteConfirmado(idCliente) {
+  const pin = document.getElementById('delcli_pin').value.trim();
+  try {
+    await logic.eliminarCliente(idCliente, pin);
+    cerrarModal();
+    intentarSincronizar();
+    await volverAListaClientes();
   } catch (e) { manejarError(e, 'modalMsg'); }
 }
 
@@ -929,6 +968,7 @@ function renderResumenPrestamo(p) {
     '<span style="display:flex; align-items:center; gap:8px;">' +
       '<span class="badge ' + p.Estado + '">' + p.Estado + '</span>' +
       '<button type="button" class="btn chico secundario" onclick="mostrarModalEditarPrestamo()">✏️ Editar</button>' +
+      '<button type="button" class="btn chico secundario" onclick="confirmarEliminarPrestamo()">🗑️ Eliminar</button>' +
     '</span></div>' +
     '<div class="datos-grid">' +
       dato('Monto prestado', money(p.Monto_Prestado)) +
@@ -951,7 +991,12 @@ function renderHistorialPrestamo(p) {
     html += '<p class="muted">Sin abonos registrados.</p>';
   } else {
     html += '<div class="abonos-lista">' + p.Abonos.map((a) =>
-      '<div class="abono-row"><span>' + a.Fecha_Abono + (a.Nota ? ' — ' + esc(a.Nota) : '') + '</span><strong>' + money(a.Valor_Abono) + '</strong></div>'
+      '<div class="abono-row"><span>' + a.Fecha_Abono + (a.Nota ? ' — ' + esc(a.Nota) : '') + '</span>' +
+        '<span style="display:flex; align-items:center; gap:8px;">' +
+          '<strong>' + money(a.Valor_Abono) + '</strong>' +
+          '<button type="button" class="btn chico secundario" onclick="confirmarEliminarAbono(\'' + a.id + '\')">🗑️</button>' +
+        '</span>' +
+      '</div>'
     ).join('') + '</div>';
   }
   if (p.Historial_Retanqueos && p.Historial_Retanqueos.length) {
@@ -962,6 +1007,61 @@ function renderHistorialPrestamo(p) {
     ).join('') + '</div>';
   }
   document.getElementById('dp_historial').innerHTML = html;
+}
+
+/**
+ * Pide el PIN de acceso y una confirmación explícita antes de eliminar un préstamo,
+ * porque es una acción en cascada (borra también todos sus abonos) y no tiene reverso.
+ * Si todavía no hay un PIN configurado, en vez del formulario de PIN se muestra un aviso
+ * para ir a activarlo primero.
+ */
+async function confirmarEliminarPrestamo() {
+  if (!prestamoActual) return;
+
+  if (!(await logic.pinAccesoActivo())) {
+    abrirModal(
+      'Eliminar préstamo',
+      '<p>Para eliminar un préstamo primero debes activar un PIN de acceso.</p><p class="muted">Ve a Configuración → 🔒 PIN de acceso.</p>',
+      () => { cerrarModal(); switchTab('configuracion'); },
+      'Ir a Configuración'
+    );
+    return;
+  }
+
+  const cuerpo =
+    '<p><strong>⚠️ Esta acción no se puede deshacer.</strong> Se eliminará el préstamo <strong>' + prestamoActual.id + '</strong> y TODOS sus abonos.</p>' +
+    '<div class="field"><label>Ingresa tu PIN de acceso para confirmar *</label><input type="password" inputmode="numeric" maxlength="4" id="delpre_pin" autocomplete="off"></div>';
+  abrirModal('Eliminar préstamo', cuerpo, () => eliminarPrestamoConfirmado(prestamoActualId), 'Eliminar');
+}
+
+async function eliminarPrestamoConfirmado(idPrestamo) {
+  const pin = document.getElementById('delpre_pin').value.trim();
+  try {
+    await logic.eliminarPrestamo(idPrestamo, pin);
+    cerrarModal();
+    intentarSincronizar();
+    await mostrarDetalleCliente(clienteActualId);
+  } catch (e) { manejarError(e, 'modalMsg'); }
+}
+
+/** Eliminar un abono no pide PIN — solo confirmación (es menos destructivo y más frecuente
+ *  que borrar todo un préstamo o cliente). */
+function confirmarEliminarAbono(idAbono) {
+  abrirModal(
+    'Eliminar abono',
+    '<p>¿Seguro que quieres eliminar este abono? Esta acción no se puede deshacer.</p>',
+    () => eliminarAbonoConfirmado(idAbono),
+    'Eliminar'
+  );
+}
+
+async function eliminarAbonoConfirmado(idAbono) {
+  try {
+    await logic.eliminarAbono(idAbono);
+    cerrarModal();
+    intentarSincronizar();
+    await refrescarDetallePrestamo();
+  } catch (e) { manejarError(e, 'modalMsg'); }
 }
 
 // -------------------------------------------------------------------
@@ -1378,6 +1478,7 @@ async function refrescarCobradores() {
         '<div class="ri-acciones">' +
           '<button type="button" class="btn chico secundario" onclick="alternarActivoCobrador(\'' + c.id + '\', ' + (!c.Activo) + ')">' + (c.Activo ? 'Desactivar' : 'Activar') + '</button>' +
           '<button type="button" class="btn chico secundario" onclick="mostrarModalEditarCobrador(\'' + c.id + '\')">✏️ Editar</button>' +
+          '<button type="button" class="btn chico secundario" onclick="confirmarEliminarCobrador(\'' + c.id + '\')">🗑️ Eliminar</button>' +
         '</div>' +
       '</div></div>';
   }).join('');
@@ -1407,6 +1508,28 @@ async function guardarEdicionCobrador(idCobrador) {
   if (!nombre || !email) { mostrarMsg('modalMsg', '⚠️ El nombre y el correo son obligatorios.', 'error'); return; }
   try {
     await logic.actualizarCobrador(idCobrador, { Nombre: nombre, Email: email, Telefono: document.getElementById('ecb_telefono').value.trim() });
+    cerrarModal();
+    await refrescarCobradores();
+    intentarSincronizar();
+  } catch (e) { manejarError(e, 'modalMsg'); }
+}
+
+/** Eliminar un cobrador no pide PIN — no borra clientes ni rutas, solo desvincula al
+ *  cobrador de las rutas que tenía (quedan "sin cobrador asignado"). */
+function confirmarEliminarCobrador(idCobrador) {
+  const c = cobradoresCache.find((x) => x.id === idCobrador);
+  if (!c) return;
+  abrirModal(
+    'Eliminar cobrador',
+    '<p>¿Seguro que quieres eliminar al cobrador <strong>' + esc(c.Nombre) + '</strong>? Sus rutas quedarán sin cobrador asignado — no se eliminan ni las rutas ni sus clientes. Esta acción no se puede deshacer.</p>',
+    () => eliminarCobradorConfirmado(idCobrador),
+    'Eliminar'
+  );
+}
+
+async function eliminarCobradorConfirmado(idCobrador) {
+  try {
+    await logic.eliminarCobrador(idCobrador);
     cerrarModal();
     await refrescarCobradores();
     intentarSincronizar();
