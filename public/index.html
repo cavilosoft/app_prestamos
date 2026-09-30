@@ -67,19 +67,27 @@
         <button class="btn" onclick="mostrarFormNuevoCliente()">➕ Nuevo cliente</button>
       </div>
       <div class="card">
-        <h2>Clientes</h2>
-        <div class="row">
-          <div class="field"><label>Buscar</label><input type="text" id="cl_buscar" placeholder="Cédula, nombre o celular" oninput="onFiltroClientesChange()"></div>
-          <div class="field"><label>Ciudad</label><select id="cl_ciudad" onchange="onFiltroClientesChange()"><option value="">Todas</option></select></div>
-          <div class="field"><label>Ruta</label><select id="cl_ruta" onchange="onFiltroClientesChange()"><option value="">Todas</option></select></div>
-          <div class="field" id="cl_cobradorWrap"><label>Cobrador</label><select id="cl_cobrador" onchange="onFiltroClientesChange()"><option value="">Todos</option></select></div>
-          <div class="field">
-            <label>Clientes por página</label>
-            <select id="cl_tamano" onchange="onFiltroClientesChange()">
-              <option value="10">10</option>
-              <option value="20" selected>20</option>
-              <option value="50">50</option>
-            </select>
+        <div class="filtros-header" onclick="toggleFiltros('cl')">
+          <h2>Clientes</h2>
+          <span class="filtros-header-acciones">
+            <button type="button" class="btn-escoba" title="Limpiar filtros" onclick="event.stopPropagation(); limpiarFiltrosClientes()">🧹</button>
+            <span class="filtros-chevron" id="cl_filtrosChevron">▾</span>
+          </span>
+        </div>
+        <div class="filtros-body" id="cl_filtrosBody">
+          <div class="row">
+            <div class="field"><label>Buscar</label><input type="text" id="cl_buscar" placeholder="Cédula, nombre o celular" oninput="onFiltroClientesChange()"></div>
+            <div class="field"><label>Ciudad</label><select id="cl_ciudad" onchange="onFiltroClientesChange()"><option value="">Todas</option></select></div>
+            <div class="field"><label>Ruta</label><select id="cl_ruta" onchange="onFiltroClientesChange()"><option value="">Todas</option></select></div>
+            <div class="field" id="cl_cobradorWrap"><label>Cobrador</label><select id="cl_cobrador" onchange="onFiltroClientesChange()"><option value="">Todos</option></select></div>
+            <div class="field">
+              <label>Clientes por página</label>
+              <select id="cl_tamano" onchange="onFiltroClientesChange()">
+                <option value="10">10</option>
+                <option value="20" selected>20</option>
+                <option value="50">50</option>
+              </select>
+            </div>
           </div>
         </div>
       </div>
@@ -265,15 +273,23 @@
   <!-- ==================== TAB: DASHBOARD ==================== -->
   <section id="tab-dashboard" class="tab">
     <div class="card">
-      <h2>Filtros</h2>
-      <div class="row">
-        <div class="field"><label>Cliente</label><select id="db_cliente"><option value="">Todos los clientes</option></select></div>
-        <div class="field"><label>Ruta</label><select id="db_ruta"><option value="">Todas las rutas</option></select></div>
-        <div class="field" id="db_cobradorWrap"><label>Cobrador</label><select id="db_cobrador"><option value="">Todos los cobradores</option></select></div>
-        <div class="field"><label>Desde</label><input type="date" id="db_desde"></div>
-        <div class="field"><label>Hasta</label><input type="date" id="db_hasta"></div>
-        <div class="field" style="display:flex; align-items:flex-end;">
-          <button class="btn" style="width:100%" onclick="cargarDashboard()">Aplicar filtro</button>
+      <div class="filtros-header" onclick="toggleFiltros('db')">
+        <h2>Filtros</h2>
+        <span class="filtros-header-acciones">
+          <button type="button" class="btn-escoba" title="Limpiar filtros" onclick="event.stopPropagation(); limpiarFiltrosDashboard()">🧹</button>
+          <span class="filtros-chevron" id="db_filtrosChevron">▾</span>
+        </span>
+      </div>
+      <div class="filtros-body" id="db_filtrosBody">
+        <div class="row">
+          <div class="field"><label>Cliente</label><select id="db_cliente"><option value="">Todos los clientes</option></select></div>
+          <div class="field"><label>Ruta</label><select id="db_ruta"><option value="">Todas las rutas</option></select></div>
+          <div class="field" id="db_cobradorWrap"><label>Cobrador</label><select id="db_cobrador"><option value="">Todos los cobradores</option></select></div>
+          <div class="field"><label>Desde</label><input type="date" id="db_desde"></div>
+          <div class="field"><label>Hasta</label><input type="date" id="db_hasta"></div>
+          <div class="field" style="display:flex; align-items:flex-end;">
+            <button class="btn" style="width:100%" onclick="cargarDashboard()">Aplicar filtro</button>
+          </div>
         </div>
       </div>
     </div>

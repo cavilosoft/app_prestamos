@@ -89,6 +89,20 @@ textarea { resize: vertical; min-height: 50px; }
 .btn.secundario { background: #fff; color: var(--azul); border: 1px solid var(--azul); }
 .btn.chico { padding: 6px 10px; font-size: 12px; }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.filtros-header { display: flex; align-items: center; justify-content: space-between; cursor: pointer; user-select: none; }
+.filtros-header h2 { margin: 0; }
+.filtros-header-acciones { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
+.btn-escoba {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; padding: 0; border-radius: 7px;
+  border: 1px solid var(--azul); background: #fff; color: var(--azul);
+  font-size: 15px; line-height: 1; cursor: pointer;
+}
+.btn-escoba:hover { opacity: 0.85; }
+.filtros-chevron { color: var(--gris); font-size: 13px; transition: transform 0.15s ease; }
+.filtros-chevron.cerrado { transform: rotate(-90deg); }
+.filtros-body { margin-top: 12px; }
+.filtros-body.oculto { display: none; }
 .search-bar { display: flex; gap: 8px; }
 .search-bar input { flex: 1; }
 .resultado-item {

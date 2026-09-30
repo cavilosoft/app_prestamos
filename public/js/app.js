@@ -264,6 +264,27 @@ async function cargarSelectsFiltroClientes() {
   selCobrador.value = valorPrevioCobrador;
 }
 
+/** Colapsa/expande una sección de filtros (Clientes: 'cl', Dashboard: 'db', ...). Abierta
+ *  por defecto — cada sección arranca visible porque .filtros-body no trae la clase
+ *  "oculto" en el HTML; este toggle solo la agrega/quita al hacer clic. */
+function toggleFiltros(prefijo) {
+  const body = document.getElementById(prefijo + '_filtrosBody');
+  const chevron = document.getElementById(prefijo + '_filtrosChevron');
+  if (!body) return;
+  const seVaACerrar = !body.classList.contains('oculto');
+  body.classList.toggle('oculto', seVaACerrar);
+  if (chevron) chevron.classList.toggle('cerrado', seVaACerrar);
+}
+
+function limpiarFiltrosClientes() {
+  document.getElementById('cl_buscar').value = '';
+  document.getElementById('cl_ciudad').value = '';
+  document.getElementById('cl_ruta').value = '';
+  if (document.getElementById('cl_cobrador')) document.getElementById('cl_cobrador').value = '';
+  document.getElementById('cl_tamano').value = '20';
+  onFiltroClientesChange();
+}
+
 function onFiltroClientesChange() {
   filtrosClientes.pagina = 1;
   refrescarListaClientes();
@@ -1577,6 +1598,15 @@ async function cargarSelectsDashboard() {
   const valorPrevioCobrador = selCobrador.value;
   selCobrador.innerHTML = '<option value="">Todos los cobradores</option>' + cobradoresCache.map((c) => '<option value="' + c.id + '">' + esc(c.Nombre) + '</option>').join('');
   selCobrador.value = valorPrevioCobrador;
+}
+
+function limpiarFiltrosDashboard() {
+  document.getElementById('db_cliente').value = '';
+  document.getElementById('db_ruta').value = '';
+  if (document.getElementById('db_cobrador')) document.getElementById('db_cobrador').value = '';
+  document.getElementById('db_desde').value = '';
+  document.getElementById('db_hasta').value = '';
+  cargarDashboard();
 }
 
 async function cargarDashboard() {
